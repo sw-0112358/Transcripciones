@@ -425,13 +425,13 @@
       return r.length ? r[0] : "";
     }
 
-    
+
     function zipextraerTbloque(html) {
       // Extraer título
       const titulo = Split(html, '<h1>', '</h1>')[0] || "";
       // Extraer fecha
       const fecha  = Split(html, '<span>', '</span>')[0] || "";
-      
+
       // Extraer contenido
       const inicio = html.indexOf('<span class="content">');
       const desdeInicio = html.indexOf('>', inicio) + 1;
@@ -719,6 +719,24 @@
       if (body) body.classList.add("collapsed");
     }
 
+
+
+    function sanitizarContenido(html) {
+      // 1. Eliminar etiquetas peligrosas
+      let limpio = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+      .replace(/<\/?(html|head|body)[^>]*>/gi, "");
+
+      // 2. Opcional: eliminar atributos on* (ej. onclick, onload)
+      limpio = limpio.replace(/\son\w+="[^"]*"/gi, "");
+
+      // 3. Opcional: limitar a etiquetas seguras (p, b, i, span, div, br)
+      // Si quieres solo texto plano:
+      // limpio = limpio.replace(/<[^>]+>/g, "");
+
+      return limpio.trim();
+    }
+
     function crearZipItem(index, titulo, texto, link) {
       const item = document.createElement("div");
       item.className = "zip-item";
@@ -749,7 +767,7 @@
 
       const textoEl = document.createElement("div");
       textoEl.className = "zip-item-texto";
-      textoEl.innerHTML = texto || "Sin contenido disponible.";
+      textoEl.innerHTML = sanitizarContenido( texto )|| "Sin contenido disponible.";
       body.appendChild(textoEl);
 
       const btnColapsar = document.createElement("button");
