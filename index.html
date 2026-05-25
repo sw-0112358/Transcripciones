@@ -321,14 +321,8 @@
   <script>
 
     let trabajando = false;
-
-    // zipItems: cada elemento tiene { uid, titulo, texto, link, nombreArchivo }
-    // uid es inmutable — no cambia al eliminar elementos
     let zipItems = [];
-    let uidCounter = 0; // contador global para asignar uid únicos
-
-    // archivosEnMemoria: cada elemento tiene { uid, nombre, blob }
-    // uid coincide con el de zipItems para poder sincronizar la eliminación
+    let uidCounter = 0;
     const archivosEnMemoria = [];
 
     const nombredeHistorial = 'HistorialLink';
@@ -709,36 +703,19 @@
 
     /* ══════════════════════════════
        PANTALLA 2 — ITEMS
-       Usa uid inmutable para identificar cada ítem en el DOM,
-       en zipItems[] y en archivosEnMemoria[].
-    ══════════════════════════════ */
+       ══════════════════════════════ */
 
-    /**
-     * Elimina un ítem por su uid:
-     * 1. Lo quita de zipItems[]
-     * 2. Lo quita de archivosEnMemoria[]
-     * 3. Elimina su enlace del historial (listContainer2) por posición ordinal
-     * 4. Retira el nodo del DOM sin re-renderizar toda la lista
-     */
+    
     function eliminarZipItem(uid) {
-      // 1. Buscar posición en zipItems para sincronizar el historial
       const posicion = zipItems.findIndex(it => it.uid === uid);
-
-      // 2. Quitar de zipItems
-      zipItems = zipItems.filter(it => it.uid !== uid);
-
-      // 3. Quitar de archivosEnMemoria (mismo uid)
+      zipItems = zipItems.filter(it => it.uid !== uid);  
       const idxMem = archivosEnMemoria.findIndex(a => a.uid === uid);
       if (idxMem !== -1) archivosEnMemoria.splice(idxMem, 1);
 
-      // 4. Quitar el enlace del historial (listContainer2) por posición ordinal
       if (posicion !== -1) removerHistorialPorIndice(posicion);
-
-      // 5. Quitar solo ese nodo del DOM — O(1), sin re-renderizar
+      
       const el = document.getElementById("zip-item-" + uid);
       if (el) el.remove();
-
-      // 6. Actualizar contador
       document.getElementById("zipCountLabel").innerText =
         zipItems.length ? zipItems.length + " archivos cargados" : "Sin archivos cargados";
 
