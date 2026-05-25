@@ -425,11 +425,22 @@
       return r.length ? r[0] : "";
     }
 
+    
     function zipextraerTbloque(html) {
-      // Los HTML del ZIP extraemos todo el cuerpo del html
-      const r = Split(html, '<body>', '</body');
-      return r.length ? r[0].trim() : "";
+      // Extraer título
+      const titulo = Split(html, '<h1>', '</h1>')[0] || "";
+      // Extraer fecha
+      const fecha  = Split(html, '<span>', '</span>')[0] || "";
+      
+      // Extraer contenido
+      const inicio = html.indexOf('<span class="content">');
+      const desdeInicio = html.indexOf('>', inicio) + 1;
+      const fin = html.lastIndexOf('</span>');
+      const contenido = inicio === -1 || fin === -1 ? "" : html.substring(desdeInicio, fin).trim();
+
+      return `<b>${titulo}</b><br><small>${fecha}</small><br><br>${contenido}`;
     }
+
 
     /* ── ARCHIVOS ── */
     async function crearZip(nombreReferencia) {
