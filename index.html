@@ -771,7 +771,7 @@
       return temp.innerHTML;
     }
 
-    function crearZipItem(index, titulo, texto, link) {
+   async function crearZipItem(index, titulo, texto, link) {
       const item = document.createElement("div");
       item.className = "zip-item";
       item.id = "zip-item-" + index;
@@ -801,7 +801,7 @@
 
       const textoEl = document.createElement("div");
       textoEl.className = "zip-item-texto";
-      textoEl.innerHTML =  sanitizarContenido( texto )|| "Sin contenido disponible.";
+      textoEl.innerHTML = texto|| "Sin contenido disponible.";
       body.appendChild(textoEl);
 
       const btnColapsar = document.createElement("button");
@@ -830,7 +830,7 @@
       container.innerHTML = "";
       for (let i = 0; i < zipItems.length; i++) {
         const it = zipItems[i];
-        container.appendChild(crearZipItem(i, it.titulo, it.texto, it.link));
+        container.appendChild( await crearZipItem(i, it.titulo, it.texto, it.link));
         actualizarStatus('item: ' + it.titulo);
      //   await new Promise(r => setTimeout(r, 0)); // cede el hilo
       }
@@ -945,7 +945,7 @@
           const texto  = zipextraerTbloque(contenido);
           const link   = linksHistorial[count] || "";
           zipItems.push({ titulo, texto, link });
-          actualizarStatus ('descomprinido ' + titulo);          
+          actualizarStatus ('descomprimido ' + titulo);          
           count++;
         }
 
