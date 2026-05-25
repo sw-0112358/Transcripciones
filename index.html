@@ -826,7 +826,7 @@
 
       const textoEl = document.createElement("div");
       textoEl.className = "zip-item-texto";
-      textoEl.innerHTML = texto || "Sin contenido disponible.";
+      textoEl.innerHTML = sanitizarContenido(texto)|| "Sin contenido disponible.";
       body.appendChild(textoEl);
 
       const btnColapsar = document.createElement("button");
