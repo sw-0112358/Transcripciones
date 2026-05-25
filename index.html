@@ -3,7 +3,6 @@
   <head>
     <meta charset="UTF-8">
 
-
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icono.jpg" type="image/jpeg">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -257,7 +256,7 @@
     <div id="pantalla1" class="pantalla">
       <div class="screen-header"><h4>Descargar Transcripciones</h4></div>
       <div class="card">
-        <input type="file" id="srtFileInput" accept=".zip" style="display:none" onchange="procesarSrtSeleccionado(this)">        
+        <input type="file" id="srtFileInput" accept=".zip" style="display:none" onchange="procesarSrtSeleccionado(this)">
         <div id="listContainer" class="listview"></div>
         <div id="listContainer2" class="listview"></div>
         <div class="controls-row">
@@ -322,9 +321,17 @@
   <script>
 
     let trabajando = false;
-    let zipItems   = [];
+
+    // zipItems: cada elemento tiene { uid, titulo, texto, link, nombreArchivo }
+    // uid es inmutable — no cambia al eliminar elementos
+    let zipItems = [];
+    let uidCounter = 0; // contador global para asignar uid únicos
+
+    // archivosEnMemoria: cada elemento tiene { uid, nombre, blob }
+    // uid coincide con el de zipItems para poder sincronizar la eliminación
     const archivosEnMemoria = [];
-    const nombredeHistorial   = 'HistorialLink';
+
+    const nombredeHistorial = 'HistorialLink';
 
     /* ── HTML TEMPLATE ── */
     function renderizarHTML(tbloque, fecha, etitle) {
@@ -375,8 +382,8 @@
     function actualizarStatus(m) { document.getElementById("status").innerText = m; }
 
     function sanitizeFilename(text) {
-      let n = text.replace(/\s+/g,"-").replace(/[^a-zA-Z0-9-_]/g,"");
-      return n.length===0 ? "archivo" : n;
+      let n = text.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-_]/g, "");
+      return n.length === 0 ? "archivo" : n;
     }
 
     function parseFechaUniversal(texto) {
@@ -389,88 +396,87 @@
         "aug":"08","august":"08","sep":"09","sept":"09","september":"09","oct":"10",
         "october":"10","nov":"11","november":"11","dec":"12","december":"12"
       };
-      let limpio = texto.trim().toLowerCase().replace(/,/g,"").replace(/\s+/g," ");
+      let limpio = texto.trim().toLowerCase().replace(/,/g, "").replace(/\s+/g, " ");
       const rNum = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/.exec(limpio);
       if (rNum) return `${rNum[3]}-${rNum[2].padStart(2,"0")}-${rNum[1].padStart(2,"0")}`;
       const p = limpio.split(" ");
       if (p.length < 3) return "";
       let dia, mes, año;
-      if (isNaN(p[0])) { mes=meses[p[0]]||"00"; dia=p[1].padStart(2,"0"); año=p[2]; }
-      else              { dia=p[0].padStart(2,"0"); mes=meses[p[1]]||"00"; año=p[2]; }
+      if (isNaN(p[0])) { mes = meses[p[0]] || "00"; dia = p[1].padStart(2,"0"); año = p[2]; }
+      else              { dia = p[0].padStart(2,"0"); mes = meses[p[1]] || "00"; año = p[2]; }
       return `${año}-${mes}-${dia}`;
     }
 
-    function agregarSaltos(t) { 
-      return t.replace(/\/><b>/g,"/><b>\n"); }
+    function agregarSaltos(t) {
+      return t.replace(/\/><b>/g, "/><b>\n");
+    }
 
     /* ── EXTRACCIÓN (fuente web, pantalla 1) ── */
     function extraerTranscriptBloque(html) {
-      const dl1='<div class="transcript-content">', dl2='</div>', dl3='</p>';
+      const dl1 = '<div class="transcript-content">', dl2 = '</div>', dl3 = '</p>';
       const bloques = Split(html, dl1, dl2);
       if (!bloques.length) return "";
-      return Split(bloques[0]+dl1, dl3, dl1)[0] || "";
+      return Split(bloques[0] + dl1, dl3, dl1)[0] || "";
     }
     function extraerFecha(html) {
-      const dl2='</div>', dl3='</span>';
-      let sB = Split(html,'<h6>Published',dl2);
-      if (!sB.length) sB = Split(html,'<h6>Publicad',dl2);
+      const dl2 = '</div>', dl3 = '</span>';
+      let sB = Split(html, '<h6>Published', dl2);
+      if (!sB.length) sB = Split(html, '<h6>Publicad', dl2);
       if (!sB.length) return "";
-      const r = Split(sB[0],'<span>',dl3);
+      const r = Split(sB[0], '<span>', dl3);
       return r.length ? r[0].trim() : "";
     }
     function extraerTitulo(html) {
-      const sB = Split(html,'<div class="transcript-content">','</p>');
+      const sB = Split(html, '<div class="transcript-content">', '</p>');
       if (!sB.length) return "";
-      const r = Split(sB[0]+'</p>','<p class="bold">','</p>');
+      const r = Split(sB[0] + '</p>', '<p class="bold">', '</p>');
       return r.length ? r[0] : "";
     }
 
-
     function zipextraerTbloque(html) {
-      // Extraer título
-      const titulo = Split(html, '<h1>', '</h1>')[0] || "";
-      // Extraer fecha
-      const fecha  = Split(html, '<span>', '</span>')[0] || "";
-
-      // Extraer contenido
-      const inicio = html.indexOf('<span class="content">');
+      const titulo   = Split(html, '<h1>', '</h1>')[0] || "";
+      const fecha    = Split(html, '<span>', '</span>')[0] || "";
+      const inicio   = html.indexOf('<span class="content">');
       const desdeInicio = html.indexOf('>', inicio) + 1;
-      const fin = html.lastIndexOf('</span>');
+      const fin      = html.lastIndexOf('</span>');
       const contenido = inicio === -1 || fin === -1 ? "" : html.substring(desdeInicio, fin).trim();
-
       return `<b>${titulo}</b><br><small>${fecha}</small><br><br>${contenido}`;
     }
 
-
     /* ── ARCHIVOS ── */
     async function crearZip(nombreReferencia) {
-      const zip = new JSZip();
+      const zip  = new JSZip();
       const conH = getcontenidoHistorial();
-      if (conH && conH.trim()) zip.file(nombredeHistorial+'.html', conH);
+      if (conH && conH.trim()) zip.file(nombredeHistorial + '.html', conH);
       archivosEnMemoria.forEach(a => zip.file(a.nombre, a.blob));
-      const blob = await zip.generateAsync({type:"blob"});
+      const blob = await zip.generateAsync({ type: "blob" });
       const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
+      link.href     = URL.createObjectURL(blob);
       link.download = `${nombreReferencia}.zip`;
       link.click();
-      actualizarStatus("ZIP creado: "+nombreReferencia);
+      actualizarStatus("ZIP creado: " + nombreReferencia);
     }
 
     function criarArchivo(contenido, NombreDoc) {
       try {
-        const blob = new Blob([contenido],{type:"text/html"});
-        const e = document.createElement("a");
-        e.href=URL.createObjectURL(blob); e.download=NombreDoc+'.html';
+        const blob = new Blob([contenido], { type: "text/html" });
+        const e    = document.createElement("a");
+        e.href = URL.createObjectURL(blob); e.download = NombreDoc + '.html';
         document.body.appendChild(e); e.click(); document.body.removeChild(e);
         URL.revokeObjectURL(e.href);
-      } catch(err) { actualizarStatus("Error archivo "+NombreDoc+": "+err); }
+      } catch(err) { actualizarStatus("Error archivo " + NombreDoc + ": " + err); }
     }
 
-    function guardarFile(contenido, NombreDoc) {
+    // Guarda en memoria y devuelve el uid asignado para poder vincularlo a zipItems
+    function guardarFile(contenido, NombreDoc, uid) {
       try {
-        archivosEnMemoria.push({nombre:NombreDoc+".html", blob:new Blob([contenido],{type:"text/html"})});
-        actualizarStatus("Guardado: "+NombreDoc+".html");
-      } catch(err) { actualizarStatus("Error guardar: "+err.message); }
+        archivosEnMemoria.push({
+          uid:    uid,
+          nombre: NombreDoc + ".html",
+          blob:   new Blob([contenido], { type: "text/html" })
+        });
+        actualizarStatus("Guardado: " + NombreDoc + ".html");
+      } catch(err) { actualizarStatus("Error guardar: " + err.message); }
     }
 
     async function guardardoc(html) {
@@ -478,255 +484,293 @@
         const eTitle = extraerTitulo(html);
         const bloque = agregarSaltos(extraerTranscriptBloque(html));
         const eFecha = extraerFecha(html);
-        const nombre = sanitizeFilename(parseFechaUniversal(eFecha)+'-'+eTitle);
-        await guardarFile(renderizarHTML(bloque,eFecha,eTitle), nombre);
-        actualizarStatus("Generado: "+nombre);
-      } catch(err) { actualizarStatus("Error guardardoc: "+err); }
+        const nombre = sanitizeFilename(parseFechaUniversal(eFecha) + '-' + eTitle);
+        // Sin uid aquí porque viene de descarga web, no del visor ZIP
+        guardarFile(renderizarHTML(bloque, eFecha, eTitle), nombre, null);
+        actualizarStatus("Generado: " + nombre);
+      } catch(err) { actualizarStatus("Error guardardoc: " + err); }
     }
 
     async function cargarTranscriptDesdeURL(url) {
-      try { const h=await webtotext(url); if(h) await guardardoc(h); }
-      catch(err) { actualizarStatus("Error cargar transcript: "+err); }
+      try { const h = await webtotext(url); if (h) await guardardoc(h); }
+      catch(err) { actualizarStatus("Error cargar transcript: " + err); }
     }
 
     async function webtotext(url) {
-      const r = await fetch("http://localhost:3000/url?target="+url);
+      const r = await fetch("http://localhost:3000/url?target=" + url);
       return await r.text();
     }
 
     /* ── LISTVIEW ── */
-    function listViewadd(url, containerId="listContainer") {
-      const c=document.getElementById(containerId);
-      if (!c||url.trim()==="") return;
-      const item=document.createElement("div");
-      item.className="item"; item.innerText=url;
-      item.onclick=()=>{
-        c.querySelectorAll(".item").forEach(el=>el.classList.remove("selected"));
-        item.classList.add("selected"); window.open(url,"_blank");
+    function listViewadd(url, containerId = "listContainer") {
+      const c = document.getElementById(containerId);
+      if (!c || url.trim() === "") return;
+      const item = document.createElement("div");
+      item.className = "item"; item.innerText = url;
+      item.onclick = () => {
+        c.querySelectorAll(".item").forEach(el => el.classList.remove("selected"));
+        item.classList.add("selected"); window.open(url, "_blank");
       };
       c.appendChild(item);
     }
-    function agregarCelda(url){ return listViewadd(url,"listContainer"); }
-    function addLongger(url)  { return listViewadd(url,"listContainer2"); }
+    function agregarCelda(url) { return listViewadd(url, "listContainer"); }
+    function addLongger(url)   { return listViewadd(url, "listContainer2"); }
 
-    function listViewRemover(url, containerId="listContainer") {
-      const c=document.getElementById(containerId);
-      if (!c||url.trim()==="") return;
-      const item=Array.from(c.getElementsByClassName("item")).find(el=>el.innerText.trim()===url);
+    function listViewRemover(url, containerId = "listContainer") {
+      const c = document.getElementById(containerId);
+      if (!c || url.trim() === "") return;
+      const item = Array.from(c.getElementsByClassName("item")).find(el => el.innerText.trim() === url);
       if (item) c.removeChild(item);
     }
-    function removerCelda(url){ return listViewRemover(url,"listContainer"); }
+    function removerCelda(url) { return listViewRemover(url, "listContainer"); }
+
+    // Elimina del historial (listContainer2) por posición ordinal (0-based)
+    function removerHistorialPorIndice(posicion) {
+      const c = document.getElementById("listContainer2");
+      if (!c) return;
+      const items = c.getElementsByClassName("item");
+      if (posicion >= 0 && posicion < items.length) {
+        c.removeChild(items[posicion]);
+      }
+    }
 
     function obtLink(index) {
-      const c=document.getElementById("listContainer");
-      const items=c.getElementsByClassName("item");
-      const pos=index-1;
-      if (pos>=0&&pos<items.length) return items[pos].innerText.trim();
-      actualizarStatus("Índice fuera de rango: "+index); return "";
+      const c     = document.getElementById("listContainer");
+      const items = c.getElementsByClassName("item");
+      const pos   = index - 1;
+      if (pos >= 0 && pos < items.length) return items[pos].innerText.trim();
+      actualizarStatus("Índice fuera de rango: " + index); return "";
     }
 
     /* ── URL HELPERS ── */
     function limpiarURL(base, fragmento) {
-      let e=fragmento.trim().replace(/[\r\n]/g,"").replace(/\s+/g,"").replace(/["']/g,"");
-      if (e.startsWith("http://")||e.startsWith("https://")) return e;
-      if (base.endsWith("/transcripts")&&e.startsWith("/transcripts"))
-        return base+e.replace("/transcripts","");
-      if (!base.endsWith("/")&&!e.startsWith("/")) return base+"/"+e;
-      return base+e;
+      let e = fragmento.trim().replace(/[\r\n]/g,"").replace(/\s+/g,"").replace(/["']/g,"");
+      if (e.startsWith("http://") || e.startsWith("https://")) return e;
+      if (base.endsWith("/transcripts") && e.startsWith("/transcripts"))
+        return base + e.replace("/transcripts", "");
+      if (!base.endsWith("/") && !e.startsWith("/")) return base + "/" + e;
+      return base + e;
     }
 
     function extraerReferencias(html) {
-      const r=[]; const rx=/<li class="collection-item"><a href="([^"]+)">/g; let m;
-      while((m=rx.exec(html))!==null) r.push(m[1].trim());
+      const r = []; const rx = /<li class="collection-item"><a href="([^"]+)">/g; let m;
+      while ((m = rx.exec(html)) !== null) r.push(m[1].trim());
       return r;
     }
 
     /* ── ACCIONES ── */
     async function generarLista() {
       try {
-        if (trabajando){actualizarStatus("Proceso en curso");return;}
-        trabajando=true;
-        const urlRaiz=document.getElementById("urlRaiz").value.trim();
-        if (!urlRaiz){actualizarStatus("URL raíz vacía.");trabajando=false;return;}
-        const html=await webtotext(urlRaiz);
-        if (!html){actualizarStatus("Sin contenido.");trabajando=false;return;}
-        const refs=extraerReferencias(html);
-        if (!refs.length){actualizarStatus("Sin enlaces.");trabajando=false;return;}
-        document.getElementById("listContainer").innerHTML="";
-        refs.forEach(r=>{const u=limpiarURL(urlRaiz,r);if(u)agregarCelda(u);});
-        trabajando=false;
-        actualizarStatus("Lista generada: "+refs.length+" elementos.");
-      } catch(err){trabajando=false;actualizarStatus("Error generarLista: "+err);}
+        if (trabajando) { actualizarStatus("Proceso en curso"); return; }
+        trabajando = true;
+        const urlRaiz = document.getElementById("urlRaiz").value.trim();
+        if (!urlRaiz) { actualizarStatus("URL raíz vacía."); trabajando = false; return; }
+        const html = await webtotext(urlRaiz);
+        if (!html) { actualizarStatus("Sin contenido."); trabajando = false; return; }
+        const refs = extraerReferencias(html);
+        if (!refs.length) { actualizarStatus("Sin enlaces."); trabajando = false; return; }
+        document.getElementById("listContainer").innerHTML = "";
+        refs.forEach(r => { const u = limpiarURL(urlRaiz, r); if (u) agregarCelda(u); });
+        trabajando = false;
+        actualizarStatus("Lista generada: " + refs.length + " elementos.");
+      } catch(err) { trabajando = false; actualizarStatus("Error generarLista: " + err); }
     }
 
     async function start() {
       try {
-        if (trabajando){actualizarStatus("Proceso en ejecución!");return;}
-        trabajando=true;
-        const items=document.querySelectorAll("#listContainer .item");
-        const urls=Array.from(items).map(i=>i.innerText.trim());
-        const ini=parseInt(document.getElementById("rangeStart").value,10)||1;
-        const fin=parseInt(document.getElementById("rangeEnd").value,10)||urls.length;
-        const si=Math.max(ini-1,0), ei=Math.min(fin,urls.length);
-        actualizarStatus("Procesando "+ini+" al "+fin);
-        let count=0;
-        for(let i=si;i<ei;i++){
-          const url=urls[i]; if(!url) continue;
-          actualizarStatus("Descargando: "+url);
+        if (trabajando) { actualizarStatus("Proceso en ejecución!"); return; }
+        trabajando = true;
+        const items = document.querySelectorAll("#listContainer .item");
+        const urls  = Array.from(items).map(i => i.innerText.trim());
+        const ini   = parseInt(document.getElementById("rangeStart").value, 10) || 1;
+        const fin   = parseInt(document.getElementById("rangeEnd").value,   10) || urls.length;
+        const si    = Math.max(ini - 1, 0), ei = Math.min(fin, urls.length);
+        actualizarStatus("Procesando " + ini + " al " + fin);
+        let count = 0;
+        for (let i = si; i < ei; i++) {
+          const url = urls[i]; if (!url) continue;
+          actualizarStatus("Descargando: " + url);
           await cargarTranscriptDesdeURL(url);
           addLongger(url); removerCelda(url); count++;
-          if(!trabajando){
-            actualizarStatus("Detenido. Pendientes: "+document.querySelectorAll("#listContainer .item").length);
+          if (!trabajando) {
+            actualizarStatus("Detenido. Pendientes: " + document.querySelectorAll("#listContainer .item").length);
             return;
           }
         }
-        actualizarStatus("✅ "+count+" archivos listos. Guardar con 🗃️");
-        trabajando=false;
-      } catch(err){trabajando=false;actualizarStatus("Error start: "+err);}
+        actualizarStatus("✅ " + count + " archivos listos. Guardar con 🗃️");
+        trabajando = false;
+      } catch(err) { trabajando = false; actualizarStatus("Error start: " + err); }
     }
 
     function limpiarDuplicados() {
-      const c1=document.getElementById("listContainer");
-      const c2=document.getElementById("listContainer2");
-      if(!c1||!c2){actualizarStatus("Contenedores no encontrados.");return;}
-      const hist=Array.from(c2.getElementsByClassName("item")).map(i=>i.innerText.trim());
-      Array.from(c1.getElementsByClassName("item")).forEach(i=>{
-        if(hist.includes(i.innerText.trim())) c1.removeChild(i);
+      const c1 = document.getElementById("listContainer");
+      const c2 = document.getElementById("listContainer2");
+      if (!c1 || !c2) { actualizarStatus("Contenedores no encontrados."); return; }
+      const hist = Array.from(c2.getElementsByClassName("item")).map(i => i.innerText.trim());
+      Array.from(c1.getElementsByClassName("item")).forEach(i => {
+        if (hist.includes(i.innerText.trim())) c1.removeChild(i);
       });
       actualizarStatus("Duplicados eliminados.");
     }
 
     function limpiarLongger() {
-      const c2=document.getElementById("listContainer2");
-      if(!c2){actualizarStatus("Historial no encontrado.");return;}
-      c2.innerHTML=""; limpiarHistorialLocalStorage(); archivosDescargados.length=0;
-      actualizarStatus("Historial y archivos en memoria limpiados.");
+      const c2 = document.getElementById("listContainer2");
+      if (!c2) { actualizarStatus("Historial no encontrado."); return; }
+      c2.innerHTML = ""; limpiarHistorialLocalStorage();
+      actualizarStatus("Historial limpiado.");
     }
 
-    function limpiarHistorialLocalStorage(){
+    function limpiarHistorialLocalStorage() {
       localStorage.removeItem("historialGuardado");
       actualizarStatus("Almacenamiento limpiado.");
     }
 
-    function getListviewJSON(container){
-      if(!container){actualizarStatus("Contenedor no encontrado.");return[];}
-      const items=container.querySelectorAll(".item");
-      if(!items.length){actualizarStatus("Historial vacío.");return[];}
-      return Array.from(items).map(i=>i.innerText.trim()).filter(u=>u!=="");
+    function getListviewJSON(container) {
+      if (!container) { actualizarStatus("Contenedor no encontrado."); return []; }
+      const items = container.querySelectorAll(".item");
+      if (!items.length) { actualizarStatus("Historial vacío."); return []; }
+      return Array.from(items).map(i => i.innerText.trim()).filter(u => u !== "");
     }
 
-    function getcontenidoHistorial(){
-      const h=getListviewJSON(document.getElementById("listContainer2"));
+    function getcontenidoHistorial() {
+      const h = getListviewJSON(document.getElementById("listContainer2"));
       return h.length ? h.join("\n") : "";
     }
 
-    function guardarHistorial(){
-      if(trabajando){actualizarStatus("Proceso en curso");return;}
-      trabajando=true;
-      const h=getListviewJSON(document.getElementById("listContainer2"));
-      if(!h.length){trabajando=false;return;}
+    function guardarHistorial() {
+      if (trabajando) { actualizarStatus("Proceso en curso"); return; }
+      trabajando = true;
+      const h = getListviewJSON(document.getElementById("listContainer2"));
+      if (!h.length) { trabajando = false; return; }
       localStorage.removeItem("historialGuardado");
-      localStorage.setItem("historialGuardado",JSON.stringify(h));
-      criarArchivo(h.join("\n"),"historial");
-      actualizarStatus("Historial guardado."); trabajando=false;
+      localStorage.setItem("historialGuardado", JSON.stringify(h));
+      criarArchivo(h.join("\n"), "historial");
+      actualizarStatus("Historial guardado."); trabajando = false;
     }
 
-    function guardarListaJSON(){
-      if(trabajando){actualizarStatus("Proceso en curso");return;}
-      trabajando=true;
-      const l=getListviewJSON(document.getElementById("listContainer"));
-      if(!l.length){actualizarStatus("Lista vacía.");trabajando=false;return;}
-      criarArchivo(l.join("\n"),"lista_urls");
-      actualizarStatus("Lista guardada."); trabajando=false;
+    function guardarListaJSON() {
+      if (trabajando) { actualizarStatus("Proceso en curso"); return; }
+      trabajando = true;
+      const l = getListviewJSON(document.getElementById("listContainer"));
+      if (!l.length) { actualizarStatus("Lista vacía."); trabajando = false; return; }
+      criarArchivo(l.join("\n"), "lista_urls");
+      actualizarStatus("Lista guardada."); trabajando = false;
     }
 
-    function cargarHistorial(){
-      const c2=document.getElementById("listContainer2");
-      if(!c2){actualizarStatus("Historial no encontrado");return;}
-      const j=localStorage.getItem("historialGuardado");
-      if(!j){actualizarStatus("Sin historial en localStorage.");return;}
-      c2.innerHTML="";
-      JSON.parse(j).forEach(url=>listViewadd(url,"listContainer2"));
-      actualizarStatus("Historial cargado: "+JSON.parse(j).length+" URLs.");
+    function cargarHistorial() {
+      const c2 = document.getElementById("listContainer2");
+      if (!c2) { actualizarStatus("Historial no encontrado"); return; }
+      const j = localStorage.getItem("historialGuardado");
+      if (!j) { actualizarStatus("Sin historial en localStorage."); return; }
+      c2.innerHTML = "";
+      JSON.parse(j).forEach(url => listViewadd(url, "listContainer2"));
+      actualizarStatus("Historial cargado: " + JSON.parse(j).length + " URLs.");
     }
 
-    function getnombrePrevio(){
-      try{
-        const t=document.getElementById("urlRaiz").value.trim();
-        if(!t){actualizarStatus("Sin URL en urlRaiz.");return"";}
+    function getnombrePrevio() {
+      try {
+        const t = document.getElementById("urlRaiz").value.trim();
+        if (!t) { actualizarStatus("Sin URL en urlRaiz."); return ""; }
         return new URL(t).hostname;
-      }catch(err){actualizarStatus("Error nombre: "+err.message);return"";}
+      } catch(err) { actualizarStatus("Error nombre: " + err.message); return ""; }
     }
 
-    async function GuardarZip(){
-      try{
-        const n=getnombrePrevio()||"manga";
-        await crearZip(n); actualizarStatus("ZIP guardado: "+n);
-      }catch(err){actualizarStatus("Error GuardarZip: "+err.message);}
+    async function GuardarZip() {
+      try {
+        const n = getnombrePrevio() || "manga";
+        await crearZip(n); actualizarStatus("ZIP guardado: " + n);
+      } catch(err) { actualizarStatus("Error GuardarZip: " + err.message); }
     }
 
-    function pantalla1accionSelector(valor){
-      switch(valor){
-        case "generarLista":      generarLista();break;
-        case "Start":             start();break;
+    function pantalla1accionSelector(valor) {
+      switch (valor) {
+        case "generarLista":      generarLista(); break;
+        case "Start":             start(); break;
         case "subtitulos":        document.getElementById("srtFileInput").click(); break;
-
-        case "stop":              detenerTareas();break;
-        case "limpiarDuplicados": limpiarDuplicados();break;
-        case "limpiarLongger":    limpiarLongger();break;
-        case "guardarHistorial":  guardarHistorial();break;
-        case "guardarListaJSON":  guardarListaJSON();break;
-        case "guardarZip":        GuardarZip();break;
+        case "stop":              detenerTareas(); break;
+        case "limpiarDuplicados": limpiarDuplicados(); break;
+        case "limpiarLongger":    limpiarLongger(); break;
+        case "guardarHistorial":  guardarHistorial(); break;
+        case "guardarListaJSON":  guardarListaJSON(); break;
+        case "guardarZip":        GuardarZip(); break;
       }
-      document.getElementById("accionSelector").value="";
+      document.getElementById("accionSelector").value = "";
     }
 
-    function detenerTareas(){ trabajando=false; }
+    function detenerTareas() { trabajando = false; }
 
     /* ── NAVEGACIÓN ── */
-    let pantallaActual=0;
-    function traslape(){
-      ["pantalla1","pantalla2","pantalla3"].forEach(id=>document.getElementById(id).style.display="none");
-      pantallaActual++; if(pantallaActual>3) pantallaActual=1;
-      document.getElementById("pantalla"+pantallaActual).style.display="block";
+    let pantallaActual = 0;
+    function traslape() {
+      ["pantalla1","pantalla2","pantalla3"].forEach(id => document.getElementById(id).style.display = "none");
+      pantallaActual++; if (pantallaActual > 3) pantallaActual = 1;
+      document.getElementById("pantalla" + pantallaActual).style.display = "block";
     }
 
     /* ══════════════════════════════
        PANTALLA 2 — ITEMS
+       Usa uid inmutable para identificar cada ítem en el DOM,
+       en zipItems[] y en archivosEnMemoria[].
     ══════════════════════════════ */
 
-    function eliminarZipItem(index) {
-      zipItems.splice(index, 1);
-      renderZipList();
+    /**
+     * Elimina un ítem por su uid:
+     * 1. Lo quita de zipItems[]
+     * 2. Lo quita de archivosEnMemoria[]
+     * 3. Elimina su enlace del historial (listContainer2) por posición ordinal
+     * 4. Retira el nodo del DOM sin re-renderizar toda la lista
+     */
+    function eliminarZipItem(uid) {
+      // 1. Buscar posición en zipItems para sincronizar el historial
+      const posicion = zipItems.findIndex(it => it.uid === uid);
+
+      // 2. Quitar de zipItems
+      zipItems = zipItems.filter(it => it.uid !== uid);
+
+      // 3. Quitar de archivosEnMemoria (mismo uid)
+      const idxMem = archivosEnMemoria.findIndex(a => a.uid === uid);
+      if (idxMem !== -1) archivosEnMemoria.splice(idxMem, 1);
+
+      // 4. Quitar el enlace del historial (listContainer2) por posición ordinal
+      if (posicion !== -1) removerHistorialPorIndice(posicion);
+
+      // 5. Quitar solo ese nodo del DOM — O(1), sin re-renderizar
+      const el = document.getElementById("zip-item-" + uid);
+      if (el) el.remove();
+
+      // 6. Actualizar contador
+      document.getElementById("zipCountLabel").innerText =
+        zipItems.length ? zipItems.length + " archivos cargados" : "Sin archivos cargados";
+
+      actualizarStatus("Ítem eliminado. Quedan: " + zipItems.length);
     }
 
-
-    function toggleZipItem(index) {
-      const body = document.getElementById("zip-body-" + index);
+    function toggleZipItem(uid) {
+      const body = document.getElementById("zip-body-" + uid);
       if (body) {
         body.classList.toggle("collapsed");
         const estaAbierto = !body.classList.contains("collapsed");
         if (estaAbierto) {
-          document.getElementById("zipIndex").value = index + 1;
-          localStorage.setItem("zipIndexGuardado", index + 1);
+          // Mostrar posición actual (1-based) en el campo de índice
+          const pos = zipItems.findIndex(it => it.uid === uid);
+          if (pos !== -1) {
+            document.getElementById("zipIndex").value = pos + 1;
+            localStorage.setItem("zipIndexGuardado", pos + 1);
+          }
         }
       }
     }
 
-
-    function colapsarZipItem(index) {
-      const body = document.getElementById("zip-body-" + index);
+    function colapsarZipItem(uid) {
+      const body = document.getElementById("zip-body-" + uid);
       if (body) body.classList.add("collapsed");
     }
-
-
 
     function sanitizarContenido(html) {
       if (!html) return "";
 
       const parser = new DOMParser();
-      const doc = parser.parseFromString(html, "text/html");
-
+      const doc    = parser.parseFromString(html, "text/html");
       let primerTextoLimpiado = false;
 
       function limpiarNodo(nodo, isBoldHeredado, isItalicHeredado) {
@@ -765,16 +809,16 @@
         if (l) fragmento.appendChild(l);
       });
 
-      // Convertir el fragmento a string HTML
       const temp = document.createElement("div");
       temp.appendChild(fragmento);
       return temp.innerHTML;
     }
 
-   async function crearZipItem(index, titulo, texto, link) {
+    // Crea el elemento DOM de un ítem usando uid como identificador estable
+    function crearZipItem(uid, titulo, texto, link) {
       const item = document.createElement("div");
       item.className = "zip-item";
-      item.id = "zip-item-" + index;
+      item.id = "zip-item-" + uid;
 
       const bar = document.createElement("div");
       bar.className = "zip-item-bar";
@@ -789,25 +833,25 @@
       btnDel.className = "zip-btn-del";
       btnDel.textContent = "✕";
       btnDel.title = "Eliminar";
-      btnDel.addEventListener("click", (e) => { e.stopPropagation(); eliminarZipItem(index); });
+      btnDel.addEventListener("click", (e) => { e.stopPropagation(); eliminarZipItem(uid); });
       bar.appendChild(btnDel);
 
-      bar.addEventListener("click", () => toggleZipItem(index));
+      bar.addEventListener("click", () => toggleZipItem(uid));
       item.appendChild(bar);
 
       const body = document.createElement("div");
       body.className = "zip-item-body collapsed";
-      body.id = "zip-body-" + index;
+      body.id = "zip-body-" + uid;
 
       const textoEl = document.createElement("div");
       textoEl.className = "zip-item-texto";
-      textoEl.innerHTML = sanitizarContenido(texto)|| "Sin contenido disponible.";
+      textoEl.innerHTML = sanitizarContenido(texto) || "Sin contenido disponible.";
       body.appendChild(textoEl);
 
       const btnColapsar = document.createElement("button");
       btnColapsar.className = "zip-btn-collapse";
       btnColapsar.textContent = "▲ Contraer";
-      btnColapsar.addEventListener("click", (e) => { e.stopPropagation(); colapsarZipItem(index); });
+      btnColapsar.addEventListener("click", (e) => { e.stopPropagation(); colapsarZipItem(uid); });
       body.appendChild(btnColapsar);
 
       if (link) {
@@ -825,32 +869,38 @@
       return item;
     }
 
+    // Renderiza toda la lista en lotes para no congelar la UI
     async function renderZipList() {
       const container = document.getElementById("zipListContainer");
       container.innerHTML = "";
+
+      const LOTE = 200;
       for (let i = 0; i < zipItems.length; i++) {
         const it = zipItems[i];
-        container.appendChild( await crearZipItem(i, it.titulo, it.texto, it.link));
-        actualizarStatus('item: ' + it.titulo);
-       await new Promise(r => setTimeout(r, 0)); // cede el hilo
+        // crearZipItem es síncrono ahora — no necesita await
+        container.appendChild(crearZipItem(it.uid, it.titulo, it.texto, it.link));
+        if (i % LOTE === LOTE - 1) {
+          actualizarStatus('Cargando... ' + (i + 1) + '/' + zipItems.length);
+          await new Promise(r => setTimeout(r, 0)); // cede el hilo cada LOTE ítems
+        }
       }
+
       document.getElementById("zipCountLabel").innerText =
         zipItems.length ? zipItems.length + " archivos cargados" : "Sin archivos cargados";
     }
 
     /* ── BÚSQUEDA ── */
     function ejecutarBusquedaZip() {
-      const t       = document.getElementById("p2SearchInput").value.trim().toLowerCase();
+      const t        = document.getElementById("p2SearchInput").value.trim().toLowerCase();
       const clearBtn = document.getElementById("p2SearchClear");
       const countEl  = document.getElementById("p2SearchCount");
 
       if (clearBtn) clearBtn.classList.toggle("visible", t.length > 0);
 
-      // Sin término: mostrar todo contraído
       if (!t) {
-        zipItems.forEach((_, i) => {
-          const el   = document.getElementById("zip-item-" + i);
-          const body = document.getElementById("zip-body-"  + i);
+        zipItems.forEach(it => {
+          const el   = document.getElementById("zip-item-" + it.uid);
+          const body = document.getElementById("zip-body-"  + it.uid);
           if (el)   el.style.display = "";
           if (body) body.classList.add("collapsed");
         });
@@ -859,11 +909,9 @@
       }
 
       let visibles = 0;
-
-      // Iterar por índice real — nunca por posición DOM
-      zipItems.forEach((data, i) => {
-        const el   = document.getElementById("zip-item-" + i);
-        const body = document.getElementById("zip-body-"  + i);
+      zipItems.forEach(data => {
+        const el   = document.getElementById("zip-item-" + data.uid);
+        const body = document.getElementById("zip-body-"  + data.uid);
         if (!el) return;
 
         const haystack = (
@@ -892,39 +940,39 @@
       if (clearBtn) clearBtn.classList.remove("visible");
       const countEl = document.getElementById("p2SearchCount");
       if (countEl) countEl.textContent = "";
-      zipItems.forEach((_, i) => {
-        const el   = document.getElementById("zip-item-" + i);
-        const body = document.getElementById("zip-body-"  + i);
+      zipItems.forEach(it => {
+        const el   = document.getElementById("zip-item-" + it.uid);
+        const body = document.getElementById("zip-body-"  + it.uid);
         if (el)   el.style.display = "";
         if (body) body.classList.add("collapsed");
       });
     }
 
     /* ── CARGAR ZIP ── */
-    function cargarHistorialdesdeZip(htmlContenido){
-      try{
-        const c2=document.getElementById("listContainer2");
-        c2.innerHTML="";
-        htmlContenido.split("\n").forEach(url=>{
-          if(url.trim()) listViewadd(url.trim(),"listContainer2");
+    function cargarHistorialdesdeZip(htmlContenido) {
+      try {
+        const c2 = document.getElementById("listContainer2");
+        c2.innerHTML = "";
+        htmlContenido.split("\n").forEach(url => {
+          if (url.trim()) listViewadd(url.trim(), "listContainer2");
         });
         actualizarStatus("Historial cargado desde ZIP.");
-      }catch(err){actualizarStatus("Error historial ZIP: "+err.message);}
+      } catch(err) { actualizarStatus("Error historial ZIP: " + err.message); }
     }
-
 
     async function procesarZipTrascripciones(input) {
       try {
         const file = input.files[0];
         if (!file) return;
-        input.value = ""; // reset para poder recargar el mismo archivo si hace falta
+        input.value = "";
 
         if (trabajando) { actualizarStatus("Proceso en ejecución!"); return; }
 
-        const zip = await JSZip.loadAsync(file);
-        zipItems = [];
+        const zip       = await JSZip.loadAsync(file);
+        zipItems        = [];
+        uidCounter      = 0;
         archivosEnMemoria.length = 0;
-        let count = 0;
+
         const filenames = Object.keys(zip.files).filter(f => f.endsWith(".html"));
 
         let linksHistorial = [];
@@ -937,66 +985,76 @@
           }
         }
 
+        let count = 0;
         for (const filename of filenames) {
           if (filename.includes(nombredeHistorial)) continue;
+
           const contenido = await zip.files[filename].async("string");
-          archivosEnMemoria.push({ nombre: filename, blob: new Blob([contenido], { type: "text/html" }) });
-          const titulo = filename;
-          const texto  = zipextraerTbloque(contenido);
-          const link   = linksHistorial[count] || "";
-          zipItems.push({ titulo, texto, link });
-          actualizarStatus ('descomprimido ' + titulo);          
+          const uid       = uidCounter++;          // uid único e inmutable para este ítem
+          const titulo    = filename;
+          const texto     = zipextraerTbloque(contenido);
+          const link      = linksHistorial[count] || "";
+
+          // Guardar en memoria con el mismo uid
+          archivosEnMemoria.push({
+            uid:    uid,
+            nombre: filename,
+            blob:   new Blob([contenido], { type: "text/html" })
+          });
+
+          zipItems.push({ uid, titulo, texto, link });
+          actualizarStatus('Descomprimido: ' + titulo);
           count++;
         }
 
-      await renderZipList();
+        await renderZipList();
         limpiarBusquedaZip();
         trabajando = false;
         actualizarStatus("ZIP cargado: " + count + " archivos HTML.");
-      } catch (err) {
+      } catch(err) {
         trabajando = false;
         actualizarStatus("Error cargar ZIP: " + err.message);
       }
     }
 
-    async function goStarItem(){
-      try{
-        const index=parseInt(document.getElementById("zipIndex").value,10);
-        if(isNaN(index)||index<1||index>zipItems.length){
-          actualizarStatus("Índice inválido. Rango: 1–"+zipItems.length);return;
+    async function goStarItem() {
+      try {
+        const pos = parseInt(document.getElementById("zipIndex").value, 10);
+        if (isNaN(pos) || pos < 1 || pos > zipItems.length) {
+          actualizarStatus("Índice inválido. Rango: 1–" + zipItems.length); return;
         }
-        const item=document.getElementById("zip-item-"+(index-1));
-        if(!item){actualizarStatus("Item no encontrado.");return;}
-        item.scrollIntoView({behavior:"smooth",block:"center"});
-        const body=document.getElementById("zip-body-"+(index-1));
-        if(body) body.classList.remove("collapsed");
-        actualizarStatus("Item seleccionado: "+index);
-      }catch(err){actualizarStatus("Error goStarItem: "+err.message);}
+        const it   = zipItems[pos - 1];         // posición en el array actual
+        const item = document.getElementById("zip-item-" + it.uid);
+        if (!item) { actualizarStatus("Item no encontrado."); return; }
+        item.scrollIntoView({ behavior: "smooth", block: "center" });
+        const body = document.getElementById("zip-body-" + it.uid);
+        if (body) body.classList.remove("collapsed");
+        actualizarStatus("Item seleccionado: " + pos);
+      } catch(err) { actualizarStatus("Error goStarItem: " + err.message); }
     }
 
-
     /* ── SUBTÍTULOS ── */
-    function limpiarSubtitulos(srtTexto){
-      return srtTexto.split("\n").filter(l=>{
-        const t=l.trim();
-        return t!==""&&!/^\d+$/.test(t)&&!/^\d{2}:\d{2}:\d{2},\d{3}/.test(t);
+    function limpiarSubtitulos(srtTexto) {
+      return srtTexto.split("\n").filter(l => {
+        const t = l.trim();
+        return t !== "" && !/^\d+$/.test(t) && !/^\d{2}:\d{2}:\d{2},\d{3}/.test(t);
       }).join(", ");
     }
 
-    function subtitulosextraerFecha(nombreArchivo){
-      const s=nombreArchivo.substring(0,8);
-      const fecha=new Date(`${s.substring(0,4)}-${s.substring(4,6)}-${s.substring(6,8)}`);
-      return fecha.toLocaleDateString("es-ES",{day:"2-digit",month:"long",year:"numeric"});
+    function subtitulosextraerFecha(nombreArchivo) {
+      const s     = nombreArchivo.substring(0, 8);
+      const fecha = new Date(`${s.substring(0,4)}-${s.substring(4,6)}-${s.substring(6,8)}`);
+      return fecha.toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" });
     }
 
-    async function RenderizarSubTitulo(contenido,nombreArchivo){
-      try{
-        const subFlix=limpiarSubtitulos(contenido)+' </p>';
-        const fechaEs=subtitulosextraerFecha(nombreArchivo);
-        const nombreT=nombreArchivo.substring(9).trim();
-        await guardarFile(renderizarHTML(subFlix,fechaEs,nombreT),nombreArchivo);
-        actualizarStatus("Sub renderizado: "+nombreArchivo);
-      }catch(err){actualizarStatus("Error RenderizarSubTitulo: "+err.message);}
+    async function RenderizarSubTitulo(contenido, nombreArchivo) {
+      try {
+        const subFlix = limpiarSubtitulos(contenido) + ' </p>';
+        const fechaEs = subtitulosextraerFecha(nombreArchivo);
+        const nombreT = nombreArchivo.substring(9).trim();
+        guardarFile(renderizarHTML(subFlix, fechaEs, nombreT), nombreArchivo, null);
+        actualizarStatus("Sub renderizado: " + nombreArchivo);
+      } catch(err) { actualizarStatus("Error RenderizarSubTitulo: " + err.message); }
     }
 
     async function procesarSrtSeleccionado(input) {
@@ -1023,25 +1081,24 @@
 
         actualizarStatus("✅ Sub finalizados: " + contador + " archivos. Guardar con 🗃️");
         trabajando = false;
-      } catch (err) {
+      } catch(err) {
         trabajando = false;
         actualizarStatus("Error extraerSubTitulos: " + err.message);
       }
     }
 
     /* ── INIT ── */
-    document.addEventListener("DOMContentLoaded",()=>{
+    document.addEventListener("DOMContentLoaded", () => {
       traslape();
-      document.getElementById("listContainer").innerHTML="";
+      document.getElementById("listContainer").innerHTML = "";
       agregarCelda("https://swaruu.org/transcripts/mensaje-extraterrestre-de-taygeta-pleyades-quienes-somos-1");
-      document.getElementById("urlRaiz").value="https://swaruu.org/es/transcripts";
+      document.getElementById("urlRaiz").value = "https://swaruu.org/es/transcripts";
       cargarHistorial();
 
       const zipIndexGuardado = localStorage.getItem("zipIndexGuardado");
       if (zipIndexGuardado) {
         document.getElementById("zipIndex").value = zipIndexGuardado;
       }
-
 
       actualizarStatus("Aplicación lista. Se cargó un enlace inicial.");
     });
