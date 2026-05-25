@@ -772,9 +772,6 @@
     }
 
     function crearZipItem(index, titulo, texto, link) {
-     
-      actualizarStatus('item: ' + titulo);
-      
       const item = document.createElement("div");
       item.className = "zip-item";
       item.id = "zip-item-" + index;
@@ -804,7 +801,7 @@
 
       const textoEl = document.createElement("div");
       textoEl.className = "zip-item-texto";
-      textoEl.innerHTML = sanitizarContenido( texto )|| "Sin contenido disponible.";
+      textoEl.innerHTML =  sanitizarContenido( texto )|| "Sin contenido disponible.";
       body.appendChild(textoEl);
 
       const btnColapsar = document.createElement("button");
@@ -828,12 +825,15 @@
       return item;
     }
 
-    function renderZipList() {
+    async function renderZipList() {
       const container = document.getElementById("zipListContainer");
       container.innerHTML = "";
-      zipItems.forEach((it, i) => {
+      for (let i = 0; i < zipItems.length; i++) {
+        const it = zipItems[i];
         container.appendChild(crearZipItem(i, it.titulo, it.texto, it.link));
-      });
+        actualizarStatus('item: ' + it.titulo);
+     //   await new Promise(r => setTimeout(r, 0)); // cede el hilo
+      }
       document.getElementById("zipCountLabel").innerText =
         zipItems.length ? zipItems.length + " archivos cargados" : "Sin archivos cargados";
     }
@@ -949,7 +949,7 @@
           count++;
         }
 
-        renderZipList();
+      await renderZipList();
         limpiarBusquedaZip();
         trabajando = false;
         actualizarStatus("ZIP cargado: " + count + " archivos HTML.");
