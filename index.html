@@ -722,22 +722,59 @@
 
 
     function sanitizarContenido(html) {
-      // 1. Eliminar etiquetas peligrosas
-      let limpio = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-      .replace(/<\/?(html|head|body)[^>]*>/gi, "");
+      if (!html) return "";
 
-      // 2. Opcional: eliminar atributos on* (ej. onclick, onload)
-      limpio = limpio.replace(/\son\w+="[^"]*"/gi, "");
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
 
-      // 3. Opcional: limitar a etiquetas seguras (p, b, i, span, div, br)
-      // Si quieres solo texto plano:
-      // limpio = limpio.replace(/<[^>]+>/g, "");
+      let primerTextoLimpiado = false;
 
-      return limpio.trim();
+      function limpiarNodo(nodo, isBoldHeredado, isItalicHeredado) {
+        if (nodo.nodeType === Node.TEXT_NODE) {
+          if (!nodo.textContent) return null;
+          let contenido = nodo.textContent;
+          if (!primerTextoLimpiado && contenido.trim().length > 0) {
+            contenido = contenido.replace(/^[\s\u00a0\t]+/, "");
+            primerTextoLimpiado = true;
+          }
+          if (!contenido) return null;
+          let el = document.createTextNode(contenido);
+          if (isBoldHeredado && isItalicHeredado) {
+            const b = document.createElement("b"); const i = document.createElement("i");
+            i.appendChild(el); b.appendChild(i); return b;
+          }
+          if (isBoldHeredado)   { const b = document.createElement("b"); b.appendChild(el); return b; }
+          if (isItalicHeredado) { const i = document.createElement("i"); i.appendChild(el); return i; }
+          return el;
+        }
+        if (nodo.nodeType !== Node.ELEMENT_NODE) return null;
+        const tag   = nodo.tagName.toLowerCase();
+        const style = (nodo.getAttribute("style") || "").toLowerCase().replace(/\s/g, "");
+        const bold   = isBoldHeredado   || tag === "b" || tag === "strong" || style.includes("font-weight:bold") || style.includes("font-weight:700");
+        const italic = isItalicHeredado || tag === "i" || tag === "em"     || style.includes("font-style:italic");
+        if (tag === "br") return document.createElement("br");
+        const contenedor = document.createElement("span");
+        nodo.childNodes.forEach(hijo => { const l = limpiarNodo(hijo, bold, italic); if (l) contenedor.appendChild(l); });
+        if (tag === "p" || tag === "div") contenedor.appendChild(document.createElement("br"));
+        return contenedor;
+      }
+
+      const fragmento = document.createDocumentFragment();
+      doc.body.childNodes.forEach(nodo => {
+        const l = limpiarNodo(nodo, false, false);
+        if (l) fragmento.appendChild(l);
+      });
+
+      // Convertir el fragmento a string HTML
+      const temp = document.createElement("div");
+      temp.appendChild(fragmento);
+      return temp.innerHTML;
     }
 
     function crearZipItem(index, titulo, texto, link) {
+     
+      actualizarStatus('item: ' + titulo);
+      
       const item = document.createElement("div");
       item.className = "zip-item";
       item.id = "zip-item-" + index;
@@ -787,7 +824,6 @@
         });
         body.appendChild(btnLink);
       }
-
       item.appendChild(body);
       return item;
     }
@@ -909,7 +945,7 @@
           const texto  = zipextraerTbloque(contenido);
           const link   = linksHistorial[count] || "";
           zipItems.push({ titulo, texto, link });
-          actualizarStatus (titulo);          
+          actualizarStatus ('descomprinido ' + titulo);          
           count++;
         }
 
