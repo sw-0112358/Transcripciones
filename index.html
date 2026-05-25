@@ -747,16 +747,16 @@
 
     function toggleZipItem(uid) {
       const body = document.getElementById("zip-body-" + uid);
-      if (body) {
-        body.classList.toggle("collapsed");
-        const estaAbierto = !body.classList.contains("collapsed");
-        if (estaAbierto) {
-          // Mostrar posición actual (1-based) en el campo de índice
-          const pos = zipItems.findIndex(it => it.uid === uid);
-          if (pos !== -1) {
-            document.getElementById("zipIndex").value = pos + 1;
-            localStorage.setItem("zipIndexGuardado", pos + 1);
-          }
+      if (!body) return;
+      // Construir el contenido la primera vez antes de mostrarlo
+      construirCuerpoSiNecesario(uid);
+      body.classList.toggle("collapsed");
+      const estaAbierto = !body.classList.contains("collapsed");
+      if (estaAbierto) {
+        const pos = zipItems.findIndex(it => it.uid === uid);
+        if (pos !== -1) {
+          document.getElementById("zipIndex").value = pos + 1;
+          localStorage.setItem("zipIndexGuardado", pos + 1);
         }
       }
     }
@@ -814,8 +814,46 @@
       return temp.innerHTML;
     }
 
-    // Crea el elemento DOM de un ítem usando uid como identificador estable
-    function crearZipItem(uid, titulo, texto, link) {
+    // Construye el contenido del cuerpo la PRIMERA VEZ que se abre el ítem (lazy).
+    // El texto ya está en zipItems[] desde la carga — aquí solo se vuelca al DOM.
+    function construirCuerpoSiNecesario(uid) {
+      const body = document.getElementById("zip-body-" + uid);
+      if (!body || body.dataset.cargado === "1") return;
+
+      const it = zipItems.find(x => x.uid === uid);
+      if (!it) return;
+
+      const textoEl = document.createElement("div");
+      textoEl.className = "zip-item-texto";
+      // sanitizarContenido solo se ejecuta al abrir, nunca durante la carga masiva
+      textoEl.innerHTML = sanitizarContenido(it.texto) || "Sin contenido disponible.";
+      body.appendChild(textoEl);
+
+      const btnColapsar = document.createElement("button");
+      btnColapsar.className = "zip-btn-collapse";
+      btnColapsar.textContent = "▲ Contraer";
+      btnColapsar.addEventListener("click", (e) => { e.stopPropagation(); colapsarZipItem(uid); });
+      body.appendChild(btnColapsar);
+
+      if (it.link) {
+        const btnLink = document.createElement("button");
+        btnLink.className = "zip-btn-link";
+        btnLink.textContent = "🌐";
+        btnLink.title = it.link;
+        btnLink.addEventListener("click", (e) => {
+          e.stopPropagation();
+          window.open(it.link, "_blank", "noopener,noreferrer");
+        });
+        body.appendChild(btnLink);
+      }
+
+      body.dataset.cargado = "1";
+    }
+
+    // Crea el elemento DOM de un ítem: solo la BARRA (título + botones).
+    // El cuerpo (texto largo) se deja vacío y collapsed — se llena al primer toggle.
+    // Esto elimina el cuello de botella de sanitizarContenido durante la carga masiva.
+    function crearZipItem(uid, titulo, texto) {
       const item = document.createElement("div");
       item.className = "zip-item";
       item.id = "zip-item-" + uid;
@@ -839,49 +877,30 @@
       bar.addEventListener("click", () => toggleZipItem(uid));
       item.appendChild(bar);
 
+      // Cuerpo vacío — se llena la primera vez que el usuario lo abre
       const body = document.createElement("div");
       body.className = "zip-item-body collapsed";
       body.id = "zip-body-" + uid;
-
-      const textoEl = document.createElement("div");
-      textoEl.className = "zip-item-texto";
-      textoEl.innerHTML = texto || "Sin contenido disponible.";
-      body.appendChild(textoEl);
-
-      const btnColapsar = document.createElement("button");
-      btnColapsar.className = "zip-btn-collapse";
-      btnColapsar.textContent = "▲ Contraer";
-      btnColapsar.addEventListener("click", (e) => { e.stopPropagation(); colapsarZipItem(uid); });
-      body.appendChild(btnColapsar);
-
-      if (link) {
-        const btnLink = document.createElement("button");
-        btnLink.className = "zip-btn-link";
-        btnLink.textContent = "🌐";
-        btnLink.title = link;
-        btnLink.addEventListener("click", (e) => {
-          e.stopPropagation();
-          window.open(link, "_blank", "noopener,noreferrer");
-        });
-        body.appendChild(btnLink);
-      }
+      body.dataset.cargado = "0";
       item.appendChild(body);
+
       return item;
     }
 
-    // Renderiza toda la lista en lotes para no congelar la UI
+    // Renderiza toda la lista en lotes para no congelar la UI.
+    // Solo crea la barra de cada ítem — el cuerpo se construye al abrir (lazy).
     async function renderZipList() {
       const container = document.getElementById("zipListContainer");
       container.innerHTML = "";
 
-      const LOTE = 200;
+      const LOTE = 50;
       for (let i = 0; i < zipItems.length; i++) {
         const it = zipItems[i];
-        // crearZipItem es síncrono ahora — no necesita await
-        container.appendChild(crearZipItem(it.uid, it.titulo, it.texto, it.link));
+        // Solo uid, titulo y si tiene texto (para el color de la barra)
+        container.appendChild(crearZipItem(it.uid, it.titulo, it.texto));
         if (i % LOTE === LOTE - 1) {
           actualizarStatus('Cargando... ' + (i + 1) + '/' + zipItems.length);
-          await new Promise(r => setTimeout(r, 0)); // cede el hilo cada LOTE ítems
+          await new Promise(r => setTimeout(r, 0));
         }
       }
 
@@ -1023,9 +1042,11 @@
         if (isNaN(pos) || pos < 1 || pos > zipItems.length) {
           actualizarStatus("Índice inválido. Rango: 1–" + zipItems.length); return;
         }
-        const it   = zipItems[pos - 1];         // posición en el array actual
+        const it   = zipItems[pos - 1];
         const item = document.getElementById("zip-item-" + it.uid);
         if (!item) { actualizarStatus("Item no encontrado."); return; }
+        // Construir contenido antes de mostrar
+        construirCuerpoSiNecesario(it.uid);
         item.scrollIntoView({ behavior: "smooth", block: "center" });
         const body = document.getElementById("zip-body-" + it.uid);
         if (body) body.classList.remove("collapsed");
