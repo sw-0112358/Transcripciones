@@ -803,7 +803,7 @@
       const textoEl = document.createElement("div");
       textoEl.className = "zip-item-texto";
       // sanitizarContenido solo se ejecuta al abrir, nunca durante la carga masiva
-      textoEl.innerHTML = sanitizarContenido(it.texto) || "Sin contenido disponible.";
+      textoEl.innerHTML = it.texto || "Sin contenido disponible.";
       body.appendChild(textoEl);
 
       const btnColapsar = document.createElement("button");
@@ -980,6 +980,8 @@
             break;
           }
         }
+        
+        actualizarStatus('Descomprimiendo...' + titulo);
 
         let count = 0;
         for (const filename of filenames) {
@@ -998,10 +1000,11 @@
             blob:   new Blob([contenido], { type: "text/html" })
           });
 
-          zipItems.push({ uid, titulo, texto, link });
-          actualizarStatus('Descomprimido: ' + titulo);
+          zipItems.push({ uid, titulo, texto, link });       
           count++;
         }
+        
+        actualizarStatus('Renderizar Items...' + titulo);
 
         await renderZipList();
         limpiarBusquedaZip();
