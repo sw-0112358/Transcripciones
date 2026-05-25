@@ -427,7 +427,7 @@
 
     function zipextraerTbloque(html) {
       // Los HTML del ZIP extraemos todo el cuerpo del html
-      const r = Split(html, '<header>', '</body');
+      const r = Split(html, '<body>', '</body');
       return r.length ? r[0].trim() : "";
     }
 
