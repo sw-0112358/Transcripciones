@@ -324,9 +324,17 @@
     let zipItems = [];
     let uidCounter = 0;
     const archivosEnMemoria = [];
+    const servercloud='https://shiny-bread-e818.gx0112358.workers.dev';
 
     const nombredeHistorial = 'HistorialLink';
 
+    
+    async function webtotext(url) {
+      const r = await fetch( servercloud + '/url?target=' + url);
+      return await r.text();
+    }
+    
+    
     /* ── HTML TEMPLATE ── */
     function renderizarHTML(tbloque, fecha, etitle) {
       return `<!DOCTYPE html>
@@ -488,11 +496,6 @@
     async function cargarTranscriptDesdeURL(url) {
       try { const h = await webtotext(url); if (h) await guardardoc(h); }
       catch(err) { actualizarStatus("Error cargar transcript: " + err); }
-    }
-
-    async function webtotext(url) {
-      const r = await fetch("http://localhost:3000/url?target=" + url);
-      return await r.text();
     }
 
     /* ── LISTVIEW ── */
