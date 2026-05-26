@@ -746,49 +746,19 @@
     function sanitizarContenido(html) {
       if (!html) return "";
 
-      const parser = new DOMParser();
-      const doc    = parser.parseFromString(html, "text/html");
-      let primerTextoLimpiado = false;
+      return html
+      // 1. Normalizar <strong> → <b> y <em> → <i>
+        .replace(/<strong([^>]*)>/gi, '<b>')
+        .replace(/<\/strong>/gi, '</b>')
+        .replace(/<em([^>]*)>/gi, '<i>')
+        .replace(/<\/em>/gi, '</i>')
 
-      function limpiarNodo(nodo, isBoldHeredado, isItalicHeredado) {
-        if (nodo.nodeType === Node.TEXT_NODE) {
-          if (!nodo.textContent) return null;
-          let contenido = nodo.textContent;
-          if (!primerTextoLimpiado && contenido.trim().length > 0) {
-            contenido = contenido.replace(/^[\s\u00a0\t]+/, "");
-            primerTextoLimpiado = true;
-          }
-          if (!contenido) return null;
-          let el = document.createTextNode(contenido);
-          if (isBoldHeredado && isItalicHeredado) {
-            const b = document.createElement("b"); const i = document.createElement("i");
-            i.appendChild(el); b.appendChild(i); return b;
-          }
-          if (isBoldHeredado)   { const b = document.createElement("b"); b.appendChild(el); return b; }
-          if (isItalicHeredado) { const i = document.createElement("i"); i.appendChild(el); return i; }
-          return el;
-        }
-        if (nodo.nodeType !== Node.ELEMENT_NODE) return null;
-        const tag   = nodo.tagName.toLowerCase();
-        const style = (nodo.getAttribute("style") || "").toLowerCase().replace(/\s/g, "");
-        const bold   = isBoldHeredado   || tag === "b" || tag === "strong" || style.includes("font-weight:bold") || style.includes("font-weight:700");
-        const italic = isItalicHeredado || tag === "i" || tag === "em"     || style.includes("font-style:italic");
-        if (tag === "br") return document.createElement("br");
-        const contenedor = document.createElement("span");
-        nodo.childNodes.forEach(hijo => { const l = limpiarNodo(hijo, bold, italic); if (l) contenedor.appendChild(l); });
-        if (tag === "p" || tag === "div") contenedor.appendChild(document.createElement("br"));
-        return contenedor;
-      }
+      // 2. Convertir <p> y <div> en saltos
+        .replace(/<\/p>/gi, '<br>')
+        .replace(/<\/div>/gi, '<br>')
 
-      const fragmento = document.createDocumentFragment();
-      doc.body.childNodes.forEach(nodo => {
-        const l = limpiarNodo(nodo, false, false);
-        if (l) fragmento.appendChild(l);
-      });
-
-      const temp = document.createElement("div");
-      temp.appendChild(fragmento);
-      return temp.innerHTML;
+      // 4. Eliminar TODAS las demás etiquetas excepto <b>, </b>, <i>, </i>, <br>
+        .replace(/<(?!\/?b>|\/?\bi\b>|\/?br\s*\/?>)[^>]+>/gi, '')    
     }
 
     // Construye el contenido del cuerpo la PRIMERA VEZ que se abre el ítem (lazy).
@@ -803,7 +773,7 @@
       const textoEl = document.createElement("div");
       textoEl.className = "zip-item-texto";
       // sanitizarContenido solo se ejecuta al abrir, nunca durante la carga masiva
-      textoEl.innerHTML = it.texto || "Sin contenido disponible.";
+      textoEl.innerHTML = sanitizarContenido(it.texto) || "Sin contenido disponible.";
       body.appendChild(textoEl);
 
       const btnColapsar = document.createElement("button");
