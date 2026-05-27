@@ -324,13 +324,15 @@
     let zipItems = [];
     let uidCounter = 0;
     const archivosEnMemoria = [];
-    const servercloud='https://shiny-bread-e818.gx0112358.workers.dev';
-
+   
+    const servercloud=   'https://shiny-bread-e818.gx0112358.workers.dev/raw?target=';
+    const serverclouddw= 'https://shiny-bread-e818.gx0112358.workers.dev/download?target=';
+    
     const nombredeHistorial = 'HistorialLink';
 
     
     async function webtotext(url) {
-      const r = await fetch( servercloud + '/url?target=' + url);
+      const r = await fetch( servercloud + url);
       return await r.text();
     }
     
