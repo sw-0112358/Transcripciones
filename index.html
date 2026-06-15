@@ -244,6 +244,69 @@
         font-size: 11px; color: var(--text-hint); text-align: right;
         min-height: 14px; margin-bottom: 8px; padding-right: 2px;
       }
+
+      /* ── REPRODUCTOR TTS ── */
+      #tts-player {
+        position: fixed; bottom: 0; left: 0; right: 0; z-index: 9000;
+        background: var(--surface); border-top: 1px solid var(--border);
+        box-shadow: 0 -2px 12px rgba(0,0,0,.1);
+        padding: 8px 12px; display: none; flex-direction: column; gap: 6px;
+      }
+      #tts-player.visible { display: flex; }
+
+      #tts-titulo {
+        font-size: 11px; color: var(--text-sub); white-space: nowrap;
+        overflow: hidden; text-overflow: ellipsis; font-weight: 500;
+      }
+
+      #tts-controles {
+        display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      }
+
+      #tts-controles button {
+        font-size: 13px; padding: 5px 9px; border-radius: 6px;
+        border: 1px solid var(--border); background: var(--surface-2);
+        color: var(--text); box-shadow: none; min-width: 34px;
+        transition: background .12s;
+      }
+      #tts-controles button:hover { background: #e8e8e8; transform: none; box-shadow: none; }
+      #tts-controles button:active { transform: scale(.95); }
+      #tts-controles button:disabled { opacity: .4; pointer-events: none; }
+
+      #tts-btn-play { background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; }
+
+      #tts-progreso {
+        font-size: 10px; color: var(--text-hint); font-family: monospace;
+        white-space: nowrap; flex-shrink: 0;
+      }
+
+      #tts-velocidad {
+        font-size: 11px; padding: 5px 6px; border: 1px solid var(--border);
+        border-radius: 6px; background: var(--surface-2); color: var(--text);
+        outline: none; cursor: pointer;
+      }
+
+      #tts-voz {
+        font-size: 11px; padding: 5px 6px; border: 1px solid var(--border);
+        border-radius: 6px; background: var(--surface-2); color: var(--text);
+        outline: none; cursor: pointer; max-width: 110px;
+      }
+
+      #tts-btn-cerrar {
+        margin-left: auto; background: transparent !important;
+        border-color: #e8c0c0 !important; color: #cc4444 !important;
+        font-size: 11px !important;
+      }
+
+      #tts-barra {
+        width: 100%; height: 3px; background: var(--border); border-radius: 3px;
+        overflow: hidden;
+      }
+      #tts-barra-inner {
+        height: 100%; background: var(--accent); width: 0%;
+        transition: width .3s linear;
+      }
+
     </style>
   </head>
   <body>
@@ -312,6 +375,37 @@
       <div id="zipListContainer"></div>
     </div>
 
+
+
+    <!-- REPRODUCTOR TTS -->
+    <div id="tts-player">
+      <div id="tts-titulo">—</div>
+      <div id="tts-barra"><div id="tts-barra-inner"></div></div>
+      <div id="tts-controles">
+        <button onclick="ttsAnterior()" title="Párrafo anterior">⏮</button>
+        <button id="tts-btn-play" onclick="ttsPlayPausa()">▶</button>
+        <button onclick="ttsSiguiente()" title="Párrafo siguiente">⏭</button>
+        <span id="tts-progreso">0 / 0</span>
+
+
+        <input type="range" id="tts-velocidad" 
+               min="1" max="2" step="0.01" value="1.27"
+               oninput="ttsVelocidad(this.value)"
+               style="width:80px;cursor:pointer;accent-color:var(--accent);">
+        <span id="tts-vel-label" style="font-size:10px;color:var(--text-hint);font-family:monospace;min-width:32px;">1.27×</span>
+
+
+        <select id="tts-voz" title="Voz">
+          <option value="Zephyr">Zephyr ♀</option>
+          <option value="Kore">Kore ♀</option>
+          <option value="Aoede">Aoede ♀</option>
+          <option value="Leda">Leda ♀</option>
+          <option value="Puck">Puck ♂</option>
+        </select>
+        <button id="tts-btn-cerrar" onclick="ttsCerrar()">✕</button>
+      </div>
+    </div>
+
     <!-- Pantalla 3 -->
     <div id="pantalla3" class="pantalla">
       <div class="screen-header"><h4>Área de trabajo</h4></div>
@@ -320,8 +414,7 @@
           Espacio reservado para nuevas funciones.
         </p>
       </div>
-    </div>
-
+    </div>  
   </body>
   <script>
 
@@ -838,6 +931,15 @@
       bar.className = "zip-item-bar";
       bar.style.borderLeftColor = texto ? "#6abf8a" : "transparent";
 
+
+      const btnTTS = document.createElement("button");
+      btnTTS.className = "zip-btn-del";
+      btnTTS.style.cssText = "border-color:#b8d4f0;color:#4a7fb0;";
+      btnTTS.textContent = "🔊";
+      btnTTS.title = "Escuchar";
+      btnTTS.addEventListener("click", (e) => { e.stopPropagation(); ttsIniciar(uid); });
+      bar.appendChild(btnTTS);
+
       const titulo_el = document.createElement("div");
       titulo_el.className = "zip-item-titulo";
       titulo_el.textContent = titulo;
@@ -848,6 +950,7 @@
       btnDel.textContent = "✕";
       btnDel.title = "Eliminar";
       btnDel.addEventListener("click", (e) => { e.stopPropagation(); eliminarZipItem(uid); });
+
       bar.appendChild(btnDel);
 
       bar.addEventListener("click", () => toggleZipItem(uid));
@@ -1088,6 +1191,202 @@
         actualizarStatus("Error extraerSubTitulos: " + err.message);
       }
     }
+
+
+
+    /* ══════════════════════════════
+   TTS — TEXT TO SPEECH
+══════════════════════════════ */
+    const TTS = {
+      parrafos:    [],   // array de strings
+      indice:      0,    // párrafo actual
+      audioActual: null, // AudioBuffer o Audio element
+      jugando:     false,
+      velocidad:   1.27,
+      voz:         'Zephyr',
+      cache:       {},   // indice → blob URL ya generado
+      prefetchando:false,
+      titulo:      '',
+    };
+
+    function ttsSepararParrafos(texto) {
+      // Quitar etiquetas HTML y dividir en párrafos no vacíos
+      const limpio = texto.replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+      // Dividir por punto seguido de espacio o salto — mínimo 60 chars por párrafo
+      const partes = limpio.split(/(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ])/);
+      const resultado = [];
+      let acumulado = '';
+      for (const p of partes) {
+        acumulado += (acumulado ? ' ' : '') + p;
+        if (acumulado.length >= 200) {
+          resultado.push(acumulado.trim());
+          acumulado = '';
+        }
+      }
+      if (acumulado.trim()) resultado.push(acumulado.trim());
+      return resultado.filter(p => p.length > 10);
+    }
+
+    async function ttsFetchAudio(texto, indice) {
+      if (TTS.cache[indice]) return TTS.cache[indice]; // ya cacheado
+      // Dividir en chunks de 180 chars respetando palabras
+      const chunks = [];
+      let resto = texto.trim();
+      while (resto.length > 0) {
+        if (resto.length <= 180) { chunks.push(resto); break; }
+        let corte = resto.lastIndexOf(' ', 180);
+        if (corte < 100) corte = 180;
+        chunks.push(resto.slice(0, corte).trim());
+        resto = resto.slice(corte).trim();
+      }
+
+      // Fetch de todos los chunks
+      const blobs = await Promise.all(chunks.map(async chunk => {
+        const resp = await fetch(`${CF_WORKER}/gtts?q=${encodeURIComponent(chunk)}`);
+        if (!resp.ok) throw new Error('Google TTS error: ' + resp.status);
+        return await resp.arrayBuffer();
+      }));
+
+      // Concatenar buffers
+      const totalLen = blobs.reduce((s, b) => s + b.byteLength, 0);
+      const combined = new Uint8Array(totalLen);
+      let offset = 0;
+      for (const b of blobs) {
+        combined.set(new Uint8Array(b), offset);
+        offset += b.byteLength;
+      }
+
+      const blob = new Blob([combined], { type: 'audio/mpeg' });
+      const url  = URL.createObjectURL(blob);
+      TTS.cache[indice] = url;
+      return url;
+    }
+
+    async function ttsReproducir(indice) {
+      if (indice < 0 || indice >= TTS.parrafos.length) {
+        ttsCerrar(); return;
+      }
+      TTS.indice = indice;
+      ttsActualizarUI();
+
+      if (TTS.audioActual) {
+        TTS.audioActual.pause();
+        TTS.audioActual.src = '';
+        TTS.audioActual = null;
+      }
+
+      actualizarStatus('🔊 Generando audio párrafo ' + (indice + 1) + '...');
+
+      try {
+        const url  = await ttsFetchAudio(TTS.parrafos[indice], indice);
+        actualizarStatus('✅ Audio obtenido, reproduciendo...');
+        const audio = new Audio(url);
+        audio.playbackRate = TTS.velocidad;
+        TTS.audioActual = audio;
+        TTS.jugando = true;
+        document.getElementById('tts-btn-play').textContent = '⏸';
+
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => actualizarStatus('🔊 Reproduciendo párrafo ' + (indice+1) + ' de ' + TTS.parrafos.length))
+            .catch(e => actualizarStatus('❌ Play error: ' + e.message));
+        }
+
+        const siguiente = indice + 1;
+        if (siguiente < TTS.parrafos.length && !TTS.cache[siguiente]) {
+          setTimeout(() => ttsFetchAudio(TTS.parrafos[siguiente], siguiente), 500);
+        }
+
+        audio.onended = () => { if (TTS.jugando) ttsReproducir(TTS.indice + 1); };
+        audio.ontimeupdate = () => {
+          if (!audio.duration) return;
+          const pct = (audio.currentTime / audio.duration) * 100;
+          document.getElementById('tts-barra-inner').style.width = pct + '%';
+        };
+
+      } catch(e) {
+        actualizarStatus('❌ Error TTS: ' + e.message);
+        TTS.jugando = false;
+        document.getElementById('tts-btn-play').textContent = '▶';
+      }
+    }
+
+    function ttsPlayPausa() {
+      if (!TTS.audioActual) {
+        ttsReproducir(TTS.indice);
+        return;
+      }
+      if (TTS.jugando) {
+        TTS.audioActual.pause();
+        TTS.jugando = false;
+        document.getElementById('tts-btn-play').textContent = '▶';
+      } else {
+        TTS.audioActual.play();
+        TTS.jugando = true;
+        document.getElementById('tts-btn-play').textContent = '⏸';
+      }
+    }
+
+    function ttsAnterior() {
+      ttsReproducir(Math.max(0, TTS.indice - 1));
+    }
+
+    function ttsSiguiente() {
+      ttsReproducir(Math.min(TTS.parrafos.length - 1, TTS.indice + 1));
+    }
+
+    function ttsVelocidad(v) {
+      TTS.velocidad = parseFloat(v);
+      if (TTS.audioActual) TTS.audioActual.playbackRate = TTS.velocidad;
+      const lbl = document.getElementById('tts-vel-label');
+      if (lbl) lbl.textContent = parseFloat(v).toFixed(2) + '×';
+    }
+
+    function ttsActualizarUI() {
+      document.getElementById('tts-progreso').textContent =
+        (TTS.indice + 1) + ' / ' + TTS.parrafos.length;
+      document.getElementById('tts-titulo').textContent =
+        '🔊 ' + TTS.titulo + ' — párrafo ' + (TTS.indice + 1);
+      document.getElementById('tts-barra-inner').style.width = '0%';
+    }
+
+    function ttsCerrar() {
+      if (TTS.audioActual) {
+        TTS.audioActual.pause();
+        TTS.audioActual = null;
+      }
+      TTS.jugando = false;
+      TTS.parrafos = [];
+      TTS.cache    = {};
+      TTS.indice   = 0;
+      document.getElementById('tts-player').classList.remove('visible');
+      document.getElementById('tts-btn-play').textContent = '▶';
+      actualizarStatus('🔊 Reproductor cerrado.');
+    }
+
+    function ttsIniciar(uid) {
+      const it = zipItems.find(x => x.uid === uid);
+      if (!it) return;
+
+      // Limpiar cache anterior
+      ttsCerrar();
+
+      TTS.titulo   = it.titulo;
+      TTS.voz      = document.getElementById('tts-voz')?.value || 'Zephyr';
+      TTS.parrafos = ttsSepararParrafos(it.texto);
+
+      if (!TTS.parrafos.length) {
+        actualizarStatus('⚠️ Sin texto para reproducir.');
+        return;
+      }
+      document.getElementById('tts-player').classList.add('visible');
+      const sliderVel = document.getElementById('tts-velocidad');
+      if (sliderVel) TTS.velocidad = parseFloat(sliderVel.value);
+      fetch(`${CF_WORKER}/gtts-init`).finally(() => ttsReproducir(0));
+    }
+
 
     /* ── INIT ── */
     document.addEventListener("DOMContentLoaded", () => {
