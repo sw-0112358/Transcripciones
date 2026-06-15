@@ -437,8 +437,7 @@
 
 
     function abrirConfigWorker() {
-      const actual = localStorage.getItem('_cf_worker_url') 
-      || 'https://shiny-bread-e818.gx0112358.workers.dev';
+      const actual = localStorage.getItem('_cf_worker_url');
       const nueva = prompt('☁️ Cloudflare Worker URL:', actual);
       if (nueva === null) return; // canceló
       if (!nueva.trim()) { actualizarStatus("⚠️ URL vacía, no se guardó."); return; }
@@ -455,7 +454,7 @@
     }
 
     /* ── HTML TEMPLATE ── */
-    function renderizarHTML(tbloque, fecha, etitle) {
+    function recontruirHTMLparazip(tbloque, fecha, etitle) {
       return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -478,9 +477,12 @@
   <h1>${etitle}</h1>
   <div class="published"><h6>Publicado</h6><span>${fecha}</span></div>
     </header>
+
 <div class="transcript" role="document">
-  <p><span class="content">${tbloque}</span></p>
+  <p><span class="speaker"></span>
+  ${tbloque}</p>
     </div>
+
     </body>
     </html>`;
     }
@@ -553,14 +555,17 @@
       const r = Split(sB[0] + '</p>', '<p class="bold">', '</p>');
       return r.length ? r[0] : "";
     }
-
+    
+    //.html en archivos .zip previamente generados 
     function zipextraerTbloque(html) {
       const titulo   = Split(html, '<h1>', '</h1>')[0] || "";
       const fecha    = Split(html, '<span>', '</span>')[0] || "";
-      const inicio   = html.indexOf('<span class="content">');
-      const desdeInicio = html.indexOf('>', inicio) + 1;
-      const fin      = html.lastIndexOf('</span>');
-      const contenido = inicio === -1 || fin === -1 ? "" : html.substring(desdeInicio, fin).trim();
+      const bloques  = Split(html, '<div class="transcript"', '</div>');
+      let contenido  = "";
+      if (bloques.length) {
+        const inner = bloques[0].replace(/^[^>]*>/, '');
+        contenido = inner.replace(/<span class="speaker"><\/span>/gi, '').trim();
+      }
       return `<b>${titulo}</b><br><small>${fecha}</small><br><br>${contenido}`;
     }
 
@@ -607,7 +612,7 @@
         const eFecha = extraerFecha(html);
         const nombre = sanitizeFilename(parseFechaUniversal(eFecha) + '-' + eTitle);
         // Sin uid aquí porque viene de descarga web, no del visor ZIP
-        guardarFile(renderizarHTML(bloque, eFecha, eTitle), nombre, null);
+        guardarFile(recontruirHTMLparazip(bloque, eFecha, eTitle), nombre, null);
         actualizarStatus("Generado: " + nombre);
       } catch(err) { actualizarStatus("Error guardardoc: " + err); }
     }
@@ -1093,7 +1098,7 @@
 
           const contenido = await zip.files[filename].async("string");
           const uid       = uidCounter++;          // uid único e inmutable para este ítem
-          const titulo    = filename;
+          const titulo    = filename.split('/').pop();
           const texto     = zipextraerTbloque(contenido);
           const link      = linksHistorial[count] || "";
 
@@ -1157,7 +1162,7 @@
         const subFlix = limpiarSubtitulos(contenido) + ' </p>';
         const fechaEs = subtitulosextraerFecha(nombreArchivo);
         const nombreT = nombreArchivo.substring(9).trim();
-        guardarFile(renderizarHTML(subFlix, fechaEs, nombreT), nombreArchivo, null);
+        guardarFile(recontruirHTMLparazip(subFlix, fechaEs, nombreT), nombreArchivo, null);
         actualizarStatus("Sub renderizado: " + nombreArchivo);
       } catch(err) { actualizarStatus("Error RenderizarSubTitulo: " + err.message); }
     }
