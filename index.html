@@ -719,7 +719,7 @@
         let count = 0;
         for (let i = si; i < ei; i++) {
           const url = urls[i]; if (!url) continue;
-          actualizarStatus("Descargando: " + url);
+          actualizarStatus("Descargando " + (count + 1) + " de " + (ei - si) + ": " + url);
           await cargarTranscriptDesdeURL(url);
           addLongger(url); removerCelda(url); count++;
           if (!trabajando) {
