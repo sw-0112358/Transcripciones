@@ -193,8 +193,8 @@
         color: var(--text); background: var(--surface); border-radius: var(--radius-sm);
         border: 1px solid var(--border-2); padding: 11px 13px;
       }
-      .tts-parrafo { border-radius: 4px; padding: 2px 4px; transition: background .2s; }
-      .tts-parrafo.activo { background: #fff3cd; color: #333; }
+      .tts-parrafo { display: inline; border-radius: 4px; padding: 2px 0; transition: background .2s; }
+      .tts-parrafo.activo { background: #fff3cd; }
 
       .zip-btn-collapse {
         align-self: center; background: transparent; border: 1px solid var(--border);
@@ -1216,20 +1216,22 @@
    TTS — TEXT TO SPEECH
 ══════════════════════════════ */
     const TTS = {
-      parrafos:    [],   // array de strings
-      indice:      0,    // párrafo actual
-      audioActual: null, // AudioBuffer o Audio element
+      parrafos:    [],
+      parrafosHTML:[],
+      indice:      0,
+      audioActual: null,
       jugando:     false,
       velocidad:   1.27,
       voz:         'Zephyr',
-      cache:       {},   // indice → blob URL ya generado
+      cache:       {},
       prefetchando:false,
       titulo:      '',
+      token:       0,
     };
 
     function ttsSepararParrafos(texto) {
       // Quitar etiquetas HTML y dividir en párrafos no vacíos
-      const limpio = texto.replace(/<[^>]+>/g, ' ')
+      const limpio = sanitizarContenido(texto).replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ').trim();
       // Dividir por punto seguido de espacio o salto — mínimo 60 chars por párrafo
       const partes = limpio.split(/(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ])/);
@@ -1244,6 +1246,23 @@
       }
       if (acumulado.trim()) resultado.push(acumulado.trim());
       return resultado.filter(p => p.length > 10);
+    }
+    
+    function ttsSepararParrafosHTML(textoHTML, parrafosPlanos) {
+      // Usa los mismos puntos de corte que ttsSepararParrafos pero sobre el HTML sanitizado
+      const sanitizado = sanitizarContenido(textoHTML);
+      const plano = sanitizado.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      const resultado = [];
+      let offset = 0;
+      for (const p of parrafosPlanos) {
+        const posPlano = plano.indexOf(p.substring(0, 30), offset);
+        if (posPlano === -1) { resultado.push(p); continue; }
+        // Buscar el fragmento HTML correspondiente
+        let htmlFrag = sanitizado.substring(offset);
+        resultado.push(htmlFrag.substring(0, p.length + 50).trim());
+        offset = posPlano + p.length;
+      }
+      return resultado;
     }
 
     async function ttsFetchAudio(texto, indice) {
@@ -1286,7 +1305,7 @@
         ttsCerrar(); return;
       }
       TTS.indice = indice;
-      ttsActualizarUI();
+      const miToken = ++TTS.token;
 
       if (TTS.audioActual) {
         TTS.audioActual.pause();
@@ -1308,7 +1327,11 @@
         const playPromise = audio.play();
         if (playPromise !== undefined) {
           playPromise
-            .then(() => actualizarStatus('🔊 Reproduciendo párrafo ' + (indice+1) + ' de ' + TTS.parrafos.length))
+            .then(() => {
+              if (TTS.token !== miToken) return;
+              actualizarStatus('🔊 Reproduciendo párrafo ' + (indice+1) + ' de ' + TTS.parrafos.length);
+              ttsActualizarUI();
+            })
             .catch(e => actualizarStatus('❌ Play error: ' + e.message));
         }
 
@@ -1322,6 +1345,17 @@
           if (!audio.duration) return;
           const pct = (audio.currentTime / audio.duration) * 100;
           document.getElementById('tts-barra-inner').style.width = pct + '%';
+          // Verificar que el resaltado corresponde al párrafo actual
+          const spanActivo = document.querySelector('.tts-parrafo.activo');
+          const idxActivo  = spanActivo ? parseInt(spanActivo.dataset.idx) : -1;
+          if (idxActivo !== TTS.indice) {
+            document.querySelectorAll('.tts-parrafo').forEach(el => el.classList.remove('activo'));
+            const span = document.querySelector(`.tts-parrafo[data-idx="${TTS.indice}"]`);
+            if (span) {
+              span.classList.add('activo');
+              span.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+          }
         };
 
       } catch(e) {
@@ -1413,25 +1447,50 @@
       TTS.uid      = uid;
       TTS.titulo   = it.titulo;
       TTS.voz      = document.getElementById('tts-voz')?.value || 'Zephyr';
-      TTS.parrafos = ttsSepararParrafos(it.texto);
+      // Un solo algoritmo produce texto plano (audio) y HTML (visual) juntos
+      const htmlSanitizado = sanitizarContenido(it.texto);
+      const bloques = htmlSanitizado.split(/<br\s*\/?>/gi);
+      const parrafosAudio = [];
+      const parrafosHTML  = [];
+      let acumHTML = [], acumTexto = '', charCount = 0;
+
+      for (const bloque of bloques) {
+        const textoPlano = bloque.replace(/<[^>]+>/g, '').trim();
+        if (textoPlano.length === 0) {
+          if (acumHTML.length) acumHTML.push('');
+          continue;
+        }
+        acumHTML.push(bloque);
+        acumTexto += (acumTexto ? ' ' : '') + textoPlano;
+        charCount += textoPlano.length;
+        if (charCount >= 200) {
+          parrafosHTML.push(acumHTML.join('<br>'));
+          parrafosAudio.push(acumTexto.trim());
+          acumHTML = []; acumTexto = ''; charCount = 0;
+        }
+      }
+      if (acumHTML.length) {
+        parrafosHTML.push(acumHTML.join('<br>'));
+        parrafosAudio.push(acumTexto.trim());
+      }
+
+      TTS.parrafos     = parrafosAudio.filter(p => p.length > 10);
+      TTS.parrafosHTML = parrafosHTML.filter((_, i) => parrafosAudio[i]?.length > 10);
 
       if (!TTS.parrafos.length) {
         actualizarStatus('⚠️ Sin texto para reproducir.');
         return;
       }
 
-      // Reconstruir el texto del ítem con spans por párrafo para resaltado
       const textoEl = document.getElementById('zip-texto-' + uid);
       if (textoEl) {
         textoEl.innerHTML = "";
-        TTS.parrafos.forEach((p, idx) => {
+        TTS.parrafosHTML.forEach((p, idx) => {
           const span = document.createElement("span");
           span.className = "tts-parrafo";
           span.dataset.idx = idx;
-          span.innerHTML = sanitizarContenido(p);
+          span.innerHTML = p + '<br>';
           textoEl.appendChild(span);
-          textoEl.appendChild(document.createElement("br"));
-          textoEl.appendChild(document.createElement("br"));
         });
       }
       document.getElementById('tts-player').classList.add('visible');
