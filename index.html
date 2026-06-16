@@ -574,6 +574,15 @@
       const zip  = new JSZip();
       const conH = getcontenidoHistorial();
       if (conH && conH.trim()) zip.file(nombredeHistorial + '.html', conH);
+
+      // Guardar mapa nombre→url como JSON
+      const mapaLinks = {};
+      const urls = conH ? conH.split("\n").map(l => l.trim()).filter(l => l) : [];
+      archivosEnMemoria.forEach((a, i) => {
+        if (urls[i]) mapaLinks[a.nombre] = urls[i];
+      });
+      zip.file(nombredeHistorial + '.json', JSON.stringify(mapaLinks, null, 2));
+
       archivosEnMemoria.forEach(a => zip.file(a.nombre, a.blob));
       const blob = await zip.generateAsync({ type: "blob" });
       const link = document.createElement("a");
@@ -1078,39 +1087,41 @@
         uidCounter      = 0;
         archivosEnMemoria.length = 0;
 
-        const filenames = Object.keys(zip.files).filter(f => f.endsWith(".html"));
+        const todosArchivos = Object.keys(zip.files);
+        const filenames = todosArchivos.filter(f => f.endsWith(".html") && !f.includes(nombredeHistorial));
 
-        let linksHistorial = [];
-        for (const filename of filenames) {
-          if (filename.includes(nombredeHistorial)) {
-            const cont = await zip.files[filename].async("string");
-            cargarHistorialdesdeZip(cont);
-            linksHistorial = cont.split("\n").map(l => l.trim()).filter(l => l !== "");
-            break;
-          }
+        // Cargar historial HTML (para listContainer2)
+        const histHtml = todosArchivos.find(f => f.endsWith(".html") && f.includes(nombredeHistorial));
+        if (histHtml) {
+          const cont = await zip.files[histHtml].async("string");
+          cargarHistorialdesdeZip(cont);
+        }
+
+        // Cargar mapa JSON nombre→url
+        let mapaLinks = {};
+        const histJson = todosArchivos.find(f => f.includes(nombredeHistorial) && f.endsWith(".json"));
+        if (histJson) {
+          const jsonStr = await zip.files[histJson].async("string");
+          try { mapaLinks = JSON.parse(jsonStr); } catch(e) { mapaLinks = {}; }
         }
 
         actualizarStatus('Descomprimiendo... ' + filenames.length + ' archivos');
 
-        let count = 0;
-        for (const filename of filenames) {
-          if (filename.includes(nombredeHistorial)) continue;
-
+        for (let i = 0; i < filenames.length; i++) {
+          const filename  = filenames[i];
           const contenido = await zip.files[filename].async("string");
-          const uid       = uidCounter++;          // uid único e inmutable para este ítem
+          const uid       = uidCounter++;
           const titulo    = filename.split('/').pop();
           const texto     = zipextraerTbloque(contenido);
-          const link      = linksHistorial[count] || "";
+          const link      = mapaLinks[filename] || "";
 
-          // Guardar en memoria con el mismo uid
           archivosEnMemoria.push({
             uid:    uid,
             nombre: filename,
             blob:   new Blob([contenido], { type: "text/html" })
           });
 
-          zipItems.push({ uid, titulo, texto, link });       
-          count++;
+          zipItems.push({ uid, titulo, texto, link });
         }
 
         actualizarStatus('Renderizar Items...');
@@ -1118,7 +1129,7 @@
         await renderZipList();
         limpiarBusquedaZip();
         trabajando = false;
-        actualizarStatus("ZIP cargado: " + count + " archivos HTML.");
+        actualizarStatus("ZIP cargado: " + filenames.length + " archivos HTML.");
       } catch(err) {
         trabajando = false;
         actualizarStatus("Error cargar ZIP: " + err.message);
