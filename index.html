@@ -193,6 +193,8 @@
         color: var(--text); background: var(--surface); border-radius: var(--radius-sm);
         border: 1px solid var(--border-2); padding: 11px 13px;
       }
+      .tts-parrafo { border-radius: 4px; padding: 2px 4px; transition: background .2s; }
+      .tts-parrafo.activo { background: #fff3cd; color: #333; }
 
       .zip-btn-collapse {
         align-self: center; background: transparent; border: 1px solid var(--border);
@@ -908,7 +910,7 @@
 
       const textoEl = document.createElement("div");
       textoEl.className = "zip-item-texto";
-      // sanitizarContenido solo se ejecuta al abrir, nunca durante la carga masiva
+      textoEl.id = "zip-texto-" + uid;
       textoEl.innerHTML = sanitizarContenido(it.texto) || "Sin contenido disponible.";
       body.appendChild(textoEl);
 
@@ -1366,6 +1368,14 @@
       document.getElementById('tts-titulo').textContent =
         '🔊 ' + TTS.titulo + ' — párrafo ' + (TTS.indice + 1);
       document.getElementById('tts-barra-inner').style.width = '0%';
+
+      // Resaltar párrafo activo en el texto
+      document.querySelectorAll('.tts-parrafo').forEach(el => el.classList.remove('activo'));
+      const span = document.querySelector(`.tts-parrafo[data-idx="${TTS.indice}"]`);
+      if (span) {
+        span.classList.add('activo');
+        span.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
     }
 
     function ttsCerrar() {
@@ -1373,10 +1383,21 @@
         TTS.audioActual.pause();
         TTS.audioActual = null;
       }
+
+      // Restaurar texto normal del ítem activo
+      if (TTS.uid !== undefined) {
+        const textoEl = document.getElementById('zip-texto-' + TTS.uid);
+        const it = zipItems.find(x => x.uid === TTS.uid);
+        if (textoEl && it) {
+          textoEl.innerHTML = sanitizarContenido(it.texto) || "Sin contenido disponible.";
+        }
+      }
+
       TTS.jugando = false;
       TTS.parrafos = [];
       TTS.cache    = {};
       TTS.indice   = 0;
+      TTS.uid      = undefined;
       document.getElementById('tts-player').classList.remove('visible');
       document.getElementById('tts-btn-play').textContent = '▶';
       actualizarStatus('🔊 Reproductor cerrado.');
@@ -1389,6 +1410,7 @@
       // Limpiar cache anterior
       ttsCerrar();
 
+      TTS.uid      = uid;
       TTS.titulo   = it.titulo;
       TTS.voz      = document.getElementById('tts-voz')?.value || 'Zephyr';
       TTS.parrafos = ttsSepararParrafos(it.texto);
@@ -1396,6 +1418,21 @@
       if (!TTS.parrafos.length) {
         actualizarStatus('⚠️ Sin texto para reproducir.');
         return;
+      }
+
+      // Reconstruir el texto del ítem con spans por párrafo para resaltado
+      const textoEl = document.getElementById('zip-texto-' + uid);
+      if (textoEl) {
+        textoEl.innerHTML = "";
+        TTS.parrafos.forEach((p, idx) => {
+          const span = document.createElement("span");
+          span.className = "tts-parrafo";
+          span.dataset.idx = idx;
+          span.innerHTML = sanitizarContenido(p);
+          textoEl.appendChild(span);
+          textoEl.appendChild(document.createElement("br"));
+          textoEl.appendChild(document.createElement("br"));
+        });
       }
       document.getElementById('tts-player').classList.add('visible');
       const sliderVel = document.getElementById('tts-velocidad');
