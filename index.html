@@ -149,25 +149,28 @@
       }
 
       .zip-item {
-        background: var(--surface-2); border: 1px solid var(--border);
-        border-radius: var(--radius); overflow: hidden;
-        animation: fadeUp .22s ease; transition: border-color .15s;
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); overflow: visible;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.07), 0 2px 12px rgba(0,0,0,0.04);
+        animation: fadeUp .22s ease;
+        transition: box-shadow .15s, border-color .15s, transform .12s;
       }
-      .zip-item:hover { border-color: #c8c8c8; }
+      .zip-item:hover {
+        box-shadow: 0 4px 20px rgba(0,0,0,0.10);
+        border-color: #3b6ef8; transform: translateY(-1px);
+      }
 
       .zip-item-bar {
-        display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-        background: var(--surface); border-bottom: 1px solid var(--border);
-        border-left: 3px solid transparent;
-        transition: background .12s, border-left-color .2s;
+        display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+        background: var(--surface); border-radius: var(--radius);
+        transition: background .12s;
         cursor: pointer; user-select: none;
       }
-      .zip-item-bar:hover { background: #fafafa; }
 
       .zip-item-titulo {
-        flex: 1; font-size: 12.5px; font-weight: 600; color: var(--text);
-        line-height: 1.3; overflow: hidden; display: -webkit-box;
-        -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+        flex: 1; font-size: 13px; font-weight: 600; color: var(--text);
+        line-height: 1.3; white-space: nowrap;
+        overflow: hidden; text-overflow: ellipsis;
       }
 
       .zip-btn-del {
@@ -939,22 +942,92 @@
     // El cuerpo (texto largo) se deja vacío y collapsed — se llena al primer toggle.
     // Esto elimina el cuello de botella de sanitizarContenido durante la carga masiva.
     function crearZipItem(uid, titulo, texto) {
+      // Wrapper externo para swipe
+      const wrapper = document.createElement("div");
+      wrapper.style.cssText = "position:relative;border-radius:var(--radius);";
+
+      // Fondo ámbar — TTS (deslizar derecha)
+      const swipeTTSBg = document.createElement("div");
+      swipeTTSBg.style.cssText = "position:absolute;inset:0;border-radius:var(--radius);background:#f59e0b;display:flex;align-items:center;justify-content:flex-start;padding:0 18px;font-size:13px;font-weight:600;color:#fff;opacity:0;pointer-events:none;z-index:0;transition:opacity .1s;";
+      swipeTTSBg.textContent = "🔊 Escuchar";
+      wrapper.appendChild(swipeTTSBg);
+
+      // Fondo gris — Contraer (deslizar izquierda)
+      const swipeColBg = document.createElement("div");
+      swipeColBg.style.cssText = "position:absolute;inset:0;border-radius:var(--radius);background:#6b7280;display:flex;align-items:center;justify-content:flex-end;padding:0 18px;font-size:13px;font-weight:600;color:#fff;opacity:0;pointer-events:none;z-index:0;transition:opacity .1s;";
+      swipeColBg.textContent = "▲ Contraer";
+      wrapper.appendChild(swipeColBg);
+
       const item = document.createElement("div");
       item.className = "zip-item";
       item.id = "zip-item-" + uid;
+      item.style.cssText = "position:relative;z-index:1;will-change:transform;touch-action:pan-y;";
+
+      // Swipe logic
+      let startX = 0, curX = 0, swiping = false;
+      const MAX = 110;
+
+      item.addEventListener("touchstart", e => {
+        startX = e.touches[0].clientX; curX = 0; swiping = true;
+        item.style.transition = "";
+      }, { passive: true });
+
+      item.addEventListener("touchmove", e => {
+        if (!swiping) return;
+        const dx = e.touches[0].clientX - startX;
+        if (dx > 0) {
+          curX = Math.min(dx, MAX);
+          item.style.transform = `translateX(${curX}px)`;
+          swipeTTSBg.style.opacity = curX / MAX;
+          swipeColBg.style.opacity = "0";
+        } else {
+          curX = Math.max(dx, -MAX);
+          item.style.transform = `translateX(${curX}px)`;
+          swipeColBg.style.opacity = Math.abs(curX) / MAX;
+          swipeTTSBg.style.opacity = "0";
+        }
+      }, { passive: true });
+
+      item.addEventListener("touchend", () => {
+        swiping = false;
+        const activado = curX;
+        curX = 0;
+        item.style.transition = "transform .2s ease";
+        item.style.transform  = "translateX(0)";
+        swipeColBg.style.opacity = "0";
+        setTimeout(() => { item.style.transition = ""; }, 220);
+
+        if (activado >= MAX * 0.72) {
+          // TTS — fondo cambia a ámbar parpadeante mientras carga
+          swipeTTSBg.style.opacity = "0.7";
+          swipeTTSBg.textContent   = "⏳ Iniciando…";
+          // Item se queda pegado levemente
+          setTimeout(() => {
+            item.style.transition  = "transform .15s ease, border-color .15s, box-shadow .15s";
+            item.style.transform   = "translateX(14px)";
+            item.style.borderColor = "#f59e0b";
+            item.style.boxShadow   = "0 0 0 2px rgba(245,158,11,0.25)";
+          }, 150);
+          // Guardar referencias para resetear cuando el TTS termine
+          TTS._swipeItem  = item;
+          TTS._swipeBg    = swipeTTSBg;
+          ttsIniciar(uid);
+
+        } else if (activado <= -MAX * 0.72) {
+          swipeTTSBg.style.opacity = "0";
+          colapsarZipItem(uid);
+        } else {
+          swipeTTSBg.style.opacity = "0";
+        }
+      });
+
+      wrapper.appendChild(item);
 
       const bar = document.createElement("div");
       bar.className = "zip-item-bar";
-      bar.style.borderLeftColor = texto ? "#6abf8a" : "transparent";
+      bar.style.borderLeft = "none";
 
-
-      const btnTTS = document.createElement("button");
-      btnTTS.className = "zip-btn-del";
-      btnTTS.style.cssText = "border-color:#b8d4f0;color:#4a7fb0;";
-      btnTTS.textContent = "🔊";
-      btnTTS.title = "Escuchar";
-      btnTTS.addEventListener("click", (e) => { e.stopPropagation(); ttsIniciar(uid); });
-      bar.appendChild(btnTTS);
+      // bocina eliminada — reemplazada por swipe derecha
 
       const titulo_el = document.createElement("div");
       titulo_el.className = "zip-item-titulo";
@@ -966,20 +1039,18 @@
       btnDel.textContent = "✕";
       btnDel.title = "Eliminar";
       btnDel.addEventListener("click", (e) => { e.stopPropagation(); eliminarZipItem(uid); });
-
       bar.appendChild(btnDel);
 
       bar.addEventListener("click", () => toggleZipItem(uid));
       item.appendChild(bar);
 
-      // Cuerpo vacío — se llena la primera vez que el usuario lo abre
       const body = document.createElement("div");
       body.className = "zip-item-body collapsed";
       body.id = "zip-body-" + uid;
       body.dataset.cargado = "0";
       item.appendChild(body);
 
-      return item;
+      return wrapper;
     }
 
     // Renderiza toda la lista en lotes para no congelar la UI.
@@ -1417,6 +1488,9 @@
         TTS.audioActual.pause();
         TTS.audioActual = null;
       }
+      // El estado ámbar del item persiste — el usuario lo limpia deslizando izquierda
+      TTS._swipeItem = null;
+      TTS._swipeBg   = null;
 
       // Restaurar texto normal del ítem activo
       if (TTS.uid !== undefined) {
