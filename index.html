@@ -1076,7 +1076,7 @@
 
     /* ── BÚSQUEDA ── */
     function ejecutarBusquedaZip() {
-      const t        = document.getElementById("p2SearchInput").value.trim().toLowerCase();
+      const t        = document.getElementById("p2SearchInput").value.trim();
       const clearBtn = document.getElementById("p2SearchClear");
       const countEl  = document.getElementById("p2SearchCount");
 
@@ -1084,10 +1084,12 @@
 
       if (!t) {
         zipItems.forEach(it => {
-          const el   = document.getElementById("zip-item-" + it.uid);
-          const body = document.getElementById("zip-body-"  + it.uid);
-          if (el)   el.style.display = "";
-          if (body) body.classList.add("collapsed");
+          const el      = document.getElementById("zip-item-" + it.uid);
+          const body    = document.getElementById("zip-body-"  + it.uid);
+          const wrapper = el ? el.parentElement : null;
+          if (wrapper) wrapper.style.display = "";
+          if (el)      el.style.display = "";
+          if (body)    body.classList.add("collapsed");
         });
         if (countEl) countEl.textContent = "";
         return;
@@ -1095,16 +1097,27 @@
 
       let visibles = 0;
       zipItems.forEach(data => {
-        const el   = document.getElementById("zip-item-" + data.uid);
-        const body = document.getElementById("zip-body-"  + data.uid);
+        const el      = document.getElementById("zip-item-" + data.uid);
+        const body    = document.getElementById("zip-body-"  + data.uid);
+        const wrapper = el ? el.parentElement : null;
         if (!el) return;
 
-        const haystack = (
+        // Normalizar: quitar acentos y pasar a minúsculas
+        const normalizar = str => str
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+
+        const haystack = normalizar(
           (data.titulo || "") + " " +
           (data.texto  || "").replace(/<[^>]+>/g, " ")
-        ).toLowerCase();
+        );
 
-        const match = haystack.includes(t);
+        // AND: todas las palabras deben estar presentes
+        const tokens = normalizar(t).split(/\s+/).filter(w => w.length > 0);
+        const match  = tokens.every(token => haystack.includes(token));
+        // Ocultar el wrapper completo para no dejar espacio vacío
+        if (wrapper) wrapper.style.display = match ? "" : "none";
         el.style.display = match ? "" : "none";
         if (match) {
           visibles++;
@@ -1126,10 +1139,12 @@
       const countEl = document.getElementById("p2SearchCount");
       if (countEl) countEl.textContent = "";
       zipItems.forEach(it => {
-        const el   = document.getElementById("zip-item-" + it.uid);
-        const body = document.getElementById("zip-body-"  + it.uid);
-        if (el)   el.style.display = "";
-        if (body) body.classList.add("collapsed");
+        const el      = document.getElementById("zip-item-" + it.uid);
+        const body    = document.getElementById("zip-body-"  + it.uid);
+        const wrapper = el ? el.parentElement : null;
+        if (wrapper) wrapper.style.display = "";
+        if (el)      el.style.display = "";
+        if (body)    body.classList.add("collapsed");
       });
     }
 
