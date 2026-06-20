@@ -36,20 +36,46 @@
       * { box-sizing: border-box; margin: 0; padding: 0; }
 
       body {
-        font-family: Arial, sans-serif;
-        background: var(--bg);
+        font-family: 'Inter', Arial, sans-serif;
+        background: linear-gradient(135deg, #e8eef5 0%, #f0eef7 50%, #f5eef0 100%);
         min-height: 100vh;
         color: var(--text);
         display: flex;
         flex-direction: column;
         align-items: center;
+        padding: 0 12px;
+        position: relative;
+      }
+
+      /* Decoración sutil de fondo */
+      body::before {
+        content: '';
+        position: fixed;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle at 30% 20%, rgba(200, 220, 255, 0.15) 0%, transparent 40%),
+                    radial-gradient(circle at 70% 80%, rgba(220, 200, 255, 0.12) 0%, transparent 40%);
+        pointer-events: none;
+        z-index: -1;
       }
 
       .pantalla {
         display: none;
         width: 100%;
-        max-width: 660px;
-        padding: 28px 16px 90px;
+        max-width: 680px;
+        margin: 16px auto;
+        padding: 24px 20px 28px;
+        background: rgba(255, 255, 255, 0.82);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        border-radius: 18px;
+        border: 1px solid rgba(200, 200, 220, 0.45);
+        box-shadow: 
+          0 8px 32px rgba(0, 0, 0, 0.08),
+          0 2px 8px rgba(0, 0, 0, 0.04),
+          inset 0 1px 0 rgba(255, 255, 255, 0.7);
         animation: fadeUp .22s ease;
       }
       @keyframes fadeUp {
