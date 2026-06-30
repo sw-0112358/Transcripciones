@@ -1303,15 +1303,15 @@
 
         const zip = await JSZip.loadAsync(file);
         let contador = 0;
+        const subFiles = Object.keys(zip.files).filter(f => f.endsWith(".srt") || f.endsWith(".vtt"));
 
-        for (const filename of Object.keys(zip.files)) {
+        for (let i = 0; i < subFiles.length; i++) {
+          const filename = subFiles[i];
           const entry = zip.files[filename];
-          if (filename.endsWith(".srt") || filename.endsWith(".vtt")) {
-            await RenderizarSubTitulo(await entry.async("string"), filename);
-            contador++;
-            actualizarStatus("Sub-" + filename);
-            if (!trabajando) return;
-          }
+          actualizarStatus("Procesando " + (i + 1) + " de " + subFiles.length + ": " + filename);
+          await RenderizarSubTitulo(await entry.async("string"), filename);
+          contador++;
+          if (!trabajando) return;
         }
 
         actualizarStatus("✅ Sub finalizados: " + contador + " archivos. Guardar con 🗃️");
