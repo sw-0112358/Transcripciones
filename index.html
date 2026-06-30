@@ -56,7 +56,7 @@
         width: 200%;
         height: 200%;
         background: radial-gradient(circle at 30% 20%, rgba(200, 220, 255, 0.15) 0%, transparent 40%),
-                    radial-gradient(circle at 70% 80%, rgba(220, 200, 255, 0.12) 0%, transparent 40%);
+          radial-gradient(circle at 70% 80%, rgba(220, 200, 255, 0.12) 0%, transparent 40%);
         pointer-events: none;
         z-index: -1;
       }
@@ -348,7 +348,7 @@
 
     <!-- Pantalla 1 -->
     <div id="pantalla1" class="pantalla">
-      <div class="screen-header"><h4>Descargar Transcripciones</h4></div>
+      <div class="screen-header"><h4>Descargar Transcripciones 🪷v3❄️</h4></div>
       <div class="card">
         <input type="file" id="srtFileInput" accept=".zip" style="display:none" onchange="procesarSrtSeleccionado(this)">
         <div id="listContainer" class="listview"></div>
@@ -536,7 +536,7 @@
     function actualizarStatus(m) { document.getElementById("status").innerText = m; }
 
     function sanitizeFilename(text) {
-      let n = text.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-_]/g, "");
+      let n = text.replace(/[\/\\:*?"<>|\x00-\x1F]/g, "").trim();
       return n.length === 0 ? "archivo" : n;
     }
 
@@ -586,7 +586,7 @@
       const r = Split(sB[0] + '</p>', '<p class="bold">', '</p>');
       return r.length ? r[0] : "";
     }
-    
+
     //.html en archivos .zip previamente generados 
     function zipextraerTbloque(html) {
       const titulo   = Split(html, '<h1>', '</h1>')[0] || "";
@@ -1130,9 +1130,9 @@
 
         // Normalizar: quitar acentos y pasar a minúsculas
         const normalizar = str => str
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '');
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
 
         const haystack = normalizar(
           (data.titulo || "") + " " +
@@ -1359,7 +1359,7 @@
       if (acumulado.trim()) resultado.push(acumulado.trim());
       return resultado.filter(p => p.length > 10);
     }
-    
+
     function ttsSepararParrafosHTML(textoHTML, parrafosPlanos) {
       // Usa los mismos puntos de corte que ttsSepararParrafos pero sobre el HTML sanitizado
       const sanitizado = sanitizarContenido(textoHTML);
@@ -1440,10 +1440,10 @@
         if (playPromise !== undefined) {
           playPromise
             .then(() => {
-              if (TTS.token !== miToken) return;
-              actualizarStatus('🔊 Reproduciendo párrafo ' + (indice+1) + ' de ' + TTS.parrafos.length);
-              ttsActualizarUI();
-            })
+            if (TTS.token !== miToken) return;
+            actualizarStatus('🔊 Reproduciendo párrafo ' + (indice+1) + ' de ' + TTS.parrafos.length);
+            ttsActualizarUI();
+          })
             .catch(e => actualizarStatus('❌ Play error: ' + e.message));
         }
 
